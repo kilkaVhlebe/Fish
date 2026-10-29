@@ -12,6 +12,7 @@
 
 #![deny(missing_docs)]
 
+pub mod client;
 pub mod event;
 pub mod loader;
 

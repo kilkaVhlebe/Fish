@@ -121,19 +121,19 @@ pub fn run(host: &mut TestHost, script: &Script) -> Result<(), ScriptFailure> {
     for (i, step) in script.steps.iter().enumerate() {
         let n = i + 1;
         if let Some(k) = &step.key {
-            host.sim.press_key(&k.name, k.pressed);
+            host.key(&k.name, k.pressed);
         }
         if let Some(c) = &step.command {
-            host.sim.run_command(c);
+            host.command(c);
         }
         if let Some(c) = &step.chat {
-            host.sim.send_chat(c);
+            host.chat(c);
         }
         if let Some(t) = step.ticks {
-            host.sim.tick(t);
+            host.tick(t);
         }
         if let Some(f) = step.frames {
-            host.sim.frame(f);
+            host.frame(f);
         }
         let Some(expect) = &step.expect else { continue };
         let logs: Vec<String> = host.logs().into_iter().map(|r| r.message).collect();

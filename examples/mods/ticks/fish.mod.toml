@@ -1,0 +1,12 @@
+schema = 1
+id = "ticks"
+version = "0.1.0"
+name = "Ticks"
+description = "Fish example mod: logs every client hook event it receives"
+license = "MIT"
+
+[library]
+name = "ticks"
+
+[entrypoints]
+main = ["init"]

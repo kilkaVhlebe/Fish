@@ -219,6 +219,37 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
         },
     );
 
+    for (id, combine) in crate::dispatch::HOST_EVENTS {
+        let status = inner.bus.define(id, combine);
+        debug_assert!(status.is_ok(), "defining {id}");
+    }
+    for (id, table) in [
+        (
+            fish_abi::client::services::CLIENT,
+            std::ptr::from_ref(&crate::client_services::CLIENT) as usize,
+        ),
+        (
+            fish_abi::client::services::HUD,
+            std::ptr::from_ref(&crate::client_services::HUD) as usize,
+        ),
+        (
+            fish_abi::client::services::INPUT,
+            std::ptr::from_ref(&crate::client_services::INPUT) as usize,
+        ),
+        (
+            fish_abi::client::services::COMMAND_RAW,
+            std::ptr::from_ref(&crate::client_services::COMMAND_RAW) as usize,
+        ),
+    ] {
+        inner.services.write().expect("services").insert(
+            id.to_string(),
+            Service {
+                version: 1,
+                ptr: table,
+            },
+        );
+    }
+
     let Discovery {
         candidates,
         mut archives,

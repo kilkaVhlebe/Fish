@@ -1,6 +1,6 @@
 //! Shared loader state, mod records and failure handling.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 
@@ -121,6 +121,8 @@ pub(crate) struct Inner {
     pub mods: RwLock<Vec<Arc<ModRecord>>>,
     pub services: RwLock<HashMap<String, Service>>,
     pub share: Mutex<HashMap<String, (String, usize)>>,
+    pub handles: crate::handles::Handles,
+    pub keys_down: Mutex<HashSet<String>>,
     pub sink: Option<LogSink>,
     pub warnings: Mutex<Vec<String>>,
     pub errors: Mutex<Vec<String>>,
@@ -176,6 +178,8 @@ impl Inner {
                 mods: RwLock::default(),
                 services: RwLock::default(),
                 share: Mutex::default(),
+                handles: crate::handles::Handles::default(),
+                keys_down: Mutex::default(),
                 sink,
                 warnings: Mutex::default(),
                 errors: Mutex::default(),

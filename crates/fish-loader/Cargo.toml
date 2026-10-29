@@ -11,12 +11,13 @@ workspace = true
 
 [dependencies]
 fish-abi = { path = "../fish-abi" }
+fish-hooks = { path = "../fish-hooks" }
 fish-metadata = { path = "../fish-metadata" }
 fish-pack = { path = "../fish-pack" }
 libloading = "0.8"
 log = "0.4"
-semver = "1.0.28"
-serde = { version = "1.0.229", features = ["derive"] }
+semver = "1"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [dev-dependencies]

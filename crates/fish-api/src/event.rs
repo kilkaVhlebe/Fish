@@ -12,6 +12,9 @@
 //! Panics in a listener never cross the FFI boundary: the trampoline returns `PANICKED` and the
 //! host marks the mod failed.
 
+pub mod client;
+pub mod lifecycle;
+
 use std::ffi::c_void;
 use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind};

@@ -1,6 +1,23 @@
-name = "hello greets from both entrypoints"
+name = "hello greets, counts ticks, draws the HUD and answers its command"
 
 [[step]]
 ticks = 1
 [step.expect]
 logs = ["Hello from main", "Hello from client"]
+
+[[step]]
+ticks = 99
+[step.expect]
+logs = ["tick 100"]
+
+[[step]]
+frames = 1
+[step.expect]
+hud = ["Hello from Fish"]
+
+[[step]]
+command = "fish hello"
+[step.expect]
+logs = ["Fish says hello"]
+command_feedback = ["Fish says hello"]
+chat = ["Fish says hello"]

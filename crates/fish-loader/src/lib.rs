@@ -13,14 +13,20 @@
 
 mod boot;
 mod bus;
+mod client_services;
 mod discovery;
+mod dispatch;
+pub mod edition;
+mod handles;
 mod host;
 mod inner;
 mod load;
 mod report;
+pub mod selftest;
 
 pub use boot::{BootConfig, BootError, Loader, ModSummary, boot};
 pub use bus::{DEFAULT_PHASE, EventBus, EventIndex};
+pub use dispatch::{LoaderDispatch, install_global};
 pub use fish_metadata::Side;
 pub use inner::{LogRecord, LogSink, ModState};
 pub use report::{AbiReport, BootReport, ModReport};

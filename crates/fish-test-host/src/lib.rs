@@ -16,7 +16,8 @@ use std::process::Command;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use fish_api::event::Payload;
-use fish_loader::{BootConfig, BootError, Loader, LogRecord, ModState, Side};
+use fish_hooks::{Dispatch, Role};
+use fish_loader::{BootConfig, BootError, Loader, LoaderDispatch, LogRecord, ModState, Side};
 use fish_pack::PackSpec;
 
 /// A booted (or about to boot) host in a temporary game directory.
@@ -28,6 +29,7 @@ pub struct TestHost {
     dev_mods: Vec<PathBuf>,
     logs: Arc<Mutex<Vec<LogRecord>>>,
     loader: Option<Loader>,
+    dispatch: Option<LoaderDispatch>,
     /// The simulated client driven by scripts.
     pub sim: sim::Sim,
 }
@@ -49,6 +51,7 @@ impl TestHost {
             dev_mods: Vec::new(),
             logs: Arc::default(),
             loader: None,
+            dispatch: None,
             sim: sim::Sim::default(),
         }
     }
@@ -105,14 +108,98 @@ impl TestHost {
         cfg.strict = self.strict;
         cfg.dev = self.dev;
         cfg.log_sink = Some(Arc::new(move |r| logs.lock().expect("log lock").push(r)));
-        self.loader = Some(fish_loader::boot(cfg)?);
+        let loader = fish_loader::boot(cfg)?;
+        self.dispatch = Some(LoaderDispatch::new(loader.clone()));
+        self.loader = Some(loader);
         Ok(self)
     }
 
     /// Unloads the loader and boots again in the same game directory (logs are kept).
     pub fn reboot(mut self) -> Result<TestHost, BootError> {
+        self.dispatch = None;
         self.loader = None;
         self.boot()
+    }
+
+    fn game_role(&self) -> Role {
+        match self.side {
+            Side::Client => Role::Window,
+            Side::Server => Role::DedicatedServer,
+        }
+    }
+
+    fn view(&mut self, role: Role) -> (sim::SimView<'_>, &LoaderDispatch) {
+        let dir = self.dir.path().to_path_buf();
+        let dispatch = self
+            .dispatch
+            .as_ref()
+            .expect("TestHost::boot() has not been called");
+        (
+            sim::SimView {
+                role,
+                dir,
+                sim: &mut self.sim,
+            },
+            dispatch,
+        )
+    }
+
+    /// Advances `n` ticks of the main game (client, or dedicated server on a server host).
+    pub fn tick(&mut self, n: u32) {
+        let role = self.game_role();
+        self.tick_as(role, n);
+        self.sim.ticks += u64::from(n);
+    }
+
+    /// Advances `n` ticks of the integrated server (a second game next to the window).
+    pub fn tick_integrated_server(&mut self, n: u32) {
+        self.tick_as(Role::IntegratedServer, n);
+    }
+
+    fn tick_as(&mut self, role: Role, n: u32) {
+        let (mut view, dispatch) = self.view(role);
+        for _ in 0..n {
+            dispatch.tick_start(&mut view);
+            dispatch.tick_end(&mut view);
+        }
+    }
+
+    /// Renders `n` frames (frame event, then the HUD pass); `sim.hud` holds the last frame's text.
+    pub fn frame(&mut self, n: u32) {
+        let role = self.game_role();
+        let mut texts = Vec::new();
+        for _ in 0..n {
+            let mut hud = sim::SimHud::default();
+            let (mut view, dispatch) = self.view(role);
+            dispatch.frame(&mut view, 1.0 / 60.0);
+            dispatch.hud(&mut view, &mut hud);
+            texts = hud.texts;
+        }
+        self.sim.frames += u64::from(n);
+        if n > 0 {
+            self.sim.hud = texts;
+        }
+    }
+
+    /// Runs a client command; returns true when a mod handled it.
+    pub fn command(&mut self, command: &str) -> bool {
+        self.sim.commands.push(command.to_string());
+        let role = self.game_role();
+        let (mut view, dispatch) = self.view(role);
+        dispatch.client_command(&mut view, command)
+    }
+
+    /// Presses or releases a key.
+    pub fn key(&mut self, name: &str, pressed: bool) {
+        self.sim.press_key(name, pressed);
+        let role = self.game_role();
+        let (mut view, dispatch) = self.view(role);
+        dispatch.key(&mut view, name, pressed);
+    }
+
+    /// The player sends a chat message.
+    pub fn chat(&mut self, text: &str) {
+        self.sim.sent_chat.push(text.to_string());
     }
 
     /// The loader.

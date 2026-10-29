@@ -1,0 +1,84 @@
+# Fish's horizon-mixins bundle. xtask fills the @placeholders@ when it assembles the bundle.
+[mod]
+id = "fish"
+version = "@FISH_VERSION@"
+priority = 1000
+
+[compatibility]
+horizon_revision = "@HORIZON_COMMIT@"
+
+[[module]]
+id = "bridge"
+file = "crates/horizon-client/src/game.rs"
+name = "fish_bridge"
+source = "modules/bridge.rs"
+
+[[injection]]
+id = "boot"
+target = "horizon_client::game::run"
+kind = "HEAD"
+helper = "helpers/boot.rs"
+bindings = [ ]
+
+[[injection]]
+id = "tick-start"
+target = "horizon_client::game::Game<'_>::tick"
+kind = "HEAD"
+helper = "helpers/tick_start.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" } ]
+
+[[injection]]
+id = "tick-end"
+target = "horizon_client::game::native_hooks::Game<'_>::native_tick"
+kind = "HEAD"
+helper = "helpers/tick_end.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" } ]
+
+[[injection]]
+id = "frame"
+target = "horizon_client::game::native_hooks::Game<'_>::native_frame"
+kind = "HEAD"
+helper = "helpers/frame.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "elapsed", ty = "Duration", value = "elapsed" } ]
+
+[[injection]]
+id = "hud"
+target = "horizon_client::game::native_hooks::Game<'_>::native_hud"
+kind = "HEAD"
+helper = "helpers/hud.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "batch", ty = "&mut HudBatch", value = "&mut *batch" } ]
+
+[[injection]]
+id = "command"
+target = "horizon_client::game::native_hooks::Game<'_>::native_command"
+kind = "HEAD"
+helper = "helpers/command.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "command", ty = "&str", value = "command" }, { name = "ran", ty = "&mut bool", value = "&mut *ran" } ]
+
+[[injection]]
+id = "key"
+target = "horizon_client::game::native_hooks::Game<'_>::native_key"
+kind = "HEAD"
+helper = "helpers/key.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "key", ty = "&str", value = "key" }, { name = "pressed", ty = "bool", value = "pressed" } ]
+
+[[injection]]
+id = "mods"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+kind = "HEAD"
+helper = "helpers/mods.rs"
+bindings = [ { name = "mods", ty = "&mut Vec<NativeMod>", value = "&mut *mods" } ]
+
+[[injection]]
+id = "settings"
+target = "horizon_client::game::native_hooks::Game<'_>::native_settings"
+kind = "HEAD"
+helper = "helpers/settings.rs"
+bindings = [ { name = "mod_id", ty = "&str", value = "mod_id" }, { name = "buttons", ty = "&mut Vec<String>", value = "&mut *buttons" } ]
+
+[[injection]]
+id = "settings-click"
+target = "horizon_client::game::native_hooks::Game<'_>::native_settings_click"
+kind = "HEAD"
+helper = "helpers/settings_click.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "mod_id", ty = "&str", value = "mod_id" }, { name = "button", ty = "usize", value = "button" } ]
