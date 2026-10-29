@@ -40,7 +40,7 @@ file and in the Russian copy at the same time.
 
 ## P4 — Fish Edition pipeline and first hooks
 
-- [ ] **P4.1** `fish-hooks`: dispatch and view traits
+- [x] **P4.1** `fish-hooks`: dispatch and view traits
 - [ ] **P4.2** `xtask horizon fetch` and `xtask mixins install`
 - [ ] **P4.3** `xtask edition stage`
 - [ ] **P4.4** horizon-mixins bundle `fish`

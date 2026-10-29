@@ -1,0 +1,12 @@
+[package]
+name = "fish-hooks"
+description = "The dispatch interface between the Horizon edition's hooks and the Fish loader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

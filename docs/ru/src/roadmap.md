@@ -40,7 +40,7 @@
 
 ## P4 — Конвейер Fish Edition и первые хуки
 
-- [ ] **P4.1** `fish-hooks`: диспетчер и трейты представлений
+- [x] **P4.1** `fish-hooks`: диспетчер и трейты представлений
 - [ ] **P4.2** `xtask horizon fetch` и `xtask mixins install`
 - [ ] **P4.3** `xtask edition stage`
 - [ ] **P4.4** Пакет horizon-mixins `fish`
