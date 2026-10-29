@@ -22,7 +22,7 @@ file and in the Russian copy at the same time.
 ## P2 — ABI, API core, loader runtime, test host
 
 - [x] **P2.1** `fish-abi`: stable C ABI types
-- [ ] **P2.2** `fish-pack`: `.fish` archives
+- [x] **P2.2** `fish-pack`: `.fish` archives
 - [ ] **P2.3** `fish-api` core: identifiers, events, loader API, `export_mod!`
 - [ ] **P2.4** `fish-loader` core: discovery, loading, event bus, services
 - [ ] **P2.5** `fish-test-host`
