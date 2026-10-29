@@ -324,6 +324,14 @@ name = "fish-abi"
 version = "0.1.0"
 
 [[package]]
+name = "fish-api"
+version = "0.1.0"
+dependencies = [
+ "fish-abi",
+ "log",
+]
+
+[[package]]
 name = "fish-metadata"
 version = "0.1.0"
 dependencies = [
