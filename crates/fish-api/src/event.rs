@@ -13,6 +13,7 @@
 //! host marks the mod failed.
 
 pub mod client;
+pub mod debug;
 pub mod entity;
 pub mod interaction;
 pub mod lifecycle;

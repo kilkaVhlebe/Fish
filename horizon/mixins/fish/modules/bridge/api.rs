@@ -8,14 +8,34 @@ use crate::game::Game;
 use crate::game::native_hooks::NativeMod;
 
 pub(in crate::game) fn tick_start(game: &mut Game<'_>) {
+    super::events::note_context(game);
+    super::events::note_actor(game);
+    super::events::local_sleep_edge(game);
     if let Some(d) = fish_hooks::get() {
         d.tick_start(&mut GameView { game });
     }
 }
 
+thread_local! {
+    static TICKS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    // The failed mods the Options > Mods rows were last built for.
+    static FAILED: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
 pub(in crate::game) fn tick_end(game: &mut Game<'_>) {
     if let Some(d) = fish_hooks::get() {
         d.tick_end(&mut GameView { game });
+        // The crash report lists the mods and the ones that failed since: refreshed now and then.
+        if TICKS.with(|t| {
+            t.set(t.get().wrapping_add(1));
+            t.get() % 100 == 1
+        }) {
+            let failed = horizon_client::fish_lib::refresh_crash_details();
+            // A mod stopped: its Options > Mods row says so.
+            if FAILED.with(|f| f.replace(failed.clone()) != failed) && game.native_window() {
+                game.list_native_mods();
+            }
+        }
     }
 }
 

@@ -63,15 +63,15 @@ file and in the Russian copy at the same time.
 
 ## P6 — Events I: lifecycle, interaction, entity, message, command, crash, debug
 
-- [ ] **P6.1** `lifecycle`
-- [ ] **P6.2** `interaction`
-- [ ] **P6.3** `entity`
-- [ ] **P6.4** `message`
-- [ ] **P6.5** `command`
-- [ ] **P6.6** Crash report section and mod failure notices
-- [ ] **P6.7** `debug::F3_LINES`
-- [ ] **P6.8** Test-host simulation, `events-demo`, e2e scenarios
-- [ ] **P6.9** Docs per module
+- [x] **P6.1** `lifecycle`
+- [x] **P6.2** `interaction`
+- [x] **P6.3** `entity`
+- [x] **P6.4** `message`
+- [x] **P6.5** `command`
+- [x] **P6.6** Crash report section and mod failure notices
+- [x] **P6.7** `debug::F3_LINES`
+- [x] **P6.8** Test-host simulation, `events-demo`, e2e scenarios
+- [x] **P6.9** Docs per module
 
 ## P7 — Networking and registry sync
 

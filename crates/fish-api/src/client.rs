@@ -45,7 +45,7 @@ pub struct Player {
     pub dimension: String,
 }
 
-fn service<T>(id: &'static str) -> Result<(&'static T, *mut c_void), Error> {
+pub(crate) fn service<T>(id: &'static str) -> Result<(&'static T, *mut c_void), Error> {
     let h = host::get()?;
     let mut out: *const c_void = std::ptr::null();
     // SAFETY: valid host table; the id is static; `out` is a valid out pointer.

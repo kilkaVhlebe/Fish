@@ -184,6 +184,7 @@ pub(crate) fn lookup(id: &str) -> Option<*const c_void> {
         ids::HUD => (&raw const HUD_SVC).cast(),
         ids::INPUT => (&raw const INPUT).cast(),
         ids::COMMAND_RAW => (&raw const COMMAND_RAW).cast(),
+        fish_abi::commands::SERVICE_COMMANDS => (&raw const COMMANDS).cast(),
         _ => return None,
     })
 }
@@ -409,4 +410,341 @@ fn game_contexts_read_every_field_and_rewrite_text() {
         (c.face(), c.actor_uuid(), c.hand(), c.role()),
         (None, None, Hand::Main, Role::DedicatedServer)
     );
+}
+
+// ---- commands ----
+
+use fish_abi::DropUserFn;
+use fish_abi::commands::{
+    CommandArgV1, CommandCtxV1, CommandExecFn, CommandRegisterPayload, CommandsServiceV1,
+    KIND_CLIENT, KIND_SERVER, arg,
+};
+
+/// What the fake host kept of a registration.
+struct Registered {
+    kind: u8,
+    tree: String,
+    exec: CommandExecFn,
+    user: usize,
+    drop_user: Option<DropUserFn>,
+}
+
+static REGISTERED: Mutex<Vec<Registered>> = Mutex::new(Vec::new());
+/// Tests that use the fake registration list run one at a time.
+static SERIAL: Mutex<()> = Mutex::new(());
+
+static REGISTER_STATUS: Mutex<FishStatus> = Mutex::new(FishStatus::OK);
+
+unsafe extern "C" fn register(
+    _host: *mut c_void,
+    _token: u64,
+    kind: u8,
+    tree: FishStr,
+    exec: CommandExecFn,
+    user: *mut c_void,
+    drop_user: Option<DropUserFn>,
+) -> FishStatus {
+    let status = *REGISTER_STATUS.lock().unwrap();
+    if status.is_ok() {
+        REGISTERED.lock().unwrap().push(Registered {
+            kind,
+            // SAFETY: the API passes a valid string.
+            tree: unsafe { tree.as_str() }.unwrap().to_string(),
+            exec,
+            user: user as usize,
+            drop_user,
+        });
+    }
+    status
+}
+
+static COMMANDS: CommandsServiceV1 = CommandsServiceV1 {
+    header: FishServiceHeader {
+        size: size_of::<CommandsServiceV1>(),
+        version: 1,
+    },
+    register,
+};
+
+fn register_context(kind: u8, side: u8) -> crate::command::RegisterContext {
+    let p = CommandRegisterPayload {
+        size: size_of::<CommandRegisterPayload>() as u32,
+        kind,
+        side,
+        reserved: [0; 2],
+    };
+    unsafe { std::mem::transmute(p) }
+}
+
+/// Output lines collected from an executor, with their error flags.
+struct Lines(Vec<(String, bool)>);
+
+unsafe extern "C" fn out(user: *mut c_void, text: FishStr, error: u8) {
+    unsafe {
+        (*user.cast::<Lines>())
+            .0
+            .push((text.as_str().unwrap().to_string(), error != 0))
+    };
+}
+
+/// Runs executor `index` of the last registration with parsed arguments.
+fn run(index: u32, args: &[(&str, u8, &str)]) -> (FishStatus, i32, Vec<(String, bool)>) {
+    let reg = REGISTERED.lock().unwrap().pop().expect("a registration");
+    let wire: Vec<CommandArgV1> = args
+        .iter()
+        .map(|(n, k, v)| CommandArgV1 {
+            name: FishStr::new(n),
+            kind: *k,
+            value: FishStr::new(v),
+        })
+        .collect();
+    let mut lines = Lines(Vec::new());
+    let mut result = 0i32;
+    let ctx = CommandCtxV1 {
+        size: size_of::<CommandCtxV1>() as u32,
+        is_player: 1,
+        level: 2,
+        reserved: [0; 2],
+        source_name: FishStr::new("Alex"),
+        source_uuid: 9u128.to_be_bytes(),
+        pos: [1.0, 2.0, 3.0],
+        has_pos: 1,
+        reserved2: [0; 7],
+        args: wire.as_ptr(),
+        arg_count: wire.len(),
+        out: (&raw mut lines).cast(),
+        output: out,
+        result: &raw mut result,
+    };
+    let status = unsafe { (reg.exec)(reg.user as *mut c_void, index, &ctx) };
+    if let Some(f) = reg.drop_user {
+        unsafe { f(reg.user as *mut c_void) };
+    }
+    (status, result, lines.0)
+}
+
+#[test]
+fn a_command_tree_is_serialised_and_its_executors_run_with_typed_arguments() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    use crate::command::{ArgKind, argument, literal};
+    crate::fake::install();
+    REGISTERED.lock().unwrap().clear();
+    let tree = literal("demo")
+        .requires(2)
+        .executes(|c| {
+            c.feedback(&format!(
+                "{} {:?} {} {:?}",
+                c.source_name(),
+                c.source_uuid(),
+                c.level(),
+                c.position()
+            ));
+            Ok(c.is_player() as i32)
+        })
+        .then(
+            argument("n", ArgKind::Integer { min: 1, max: 9 })
+                .suggests(&["1", "2"])
+                .then(
+                    argument(
+                        "d",
+                        ArgKind::Double {
+                            min: 0.5,
+                            max: f64::INFINITY,
+                        },
+                    )
+                    .executes(|c| {
+                        c.feedback(&format!(
+                            "{} {} {}",
+                            c.get_integer("n")?,
+                            c.get_double("d")?,
+                            c.get_bool("b").is_err()
+                        ));
+                        Ok(5)
+                    }),
+                ),
+        )
+        .then(literal("redir").redirect("other"))
+        .then(
+            literal("pos").then(argument("p", ArgKind::BlockPos).executes(|c| {
+                c.feedback(&c.get_block_pos("p")?.to_string());
+                Ok(1)
+            })),
+        )
+        .then(
+            literal("txt").then(argument("t", ArgKind::Greedy).executes(|c| {
+                c.feedback(c.get_string("t")?);
+                c.get_integer("t").map(|_| 0)
+            })),
+        )
+        .then(
+            literal("flag")
+                .then(argument("b", ArgKind::Bool).executes(|c| Ok(i32::from(c.get_bool("b")?)))),
+        )
+        .then(literal("boom").executes(|_| panic!("boom")))
+        .then(
+            literal("kinds").then(
+                argument("w", ArgKind::Word).then(
+                    argument("s", ArgKind::String).then(
+                        argument("p", ArgKind::Player)
+                            .then(argument("e", ArgKind::Entity).executes(|_| Ok(0))),
+                    ),
+                ),
+            ),
+        );
+    register_context(KIND_SERVER, 0).register(tree).unwrap();
+    let json = REGISTERED.lock().unwrap()[0].tree.clone();
+    for part in [
+        r#""name":"demo","type":"literal","level":2,"exec":0"#,
+        r#""name":"n","type":"integer","min":1,"max":9,"suggests":["1","2"]"#,
+        r#""name":"d","type":"double","min":0.5"#,
+        r#""redirect":"other""#,
+        r#""type":"block_pos""#,
+        r#""type":"greedy""#,
+        r#""type":"word""#,
+        r#""type":"string""#,
+        r#""type":"player""#,
+        r#""type":"entity""#,
+    ] {
+        assert!(json.contains(part), "{part} in {json}");
+    }
+    assert!(!json.contains("\"max\":inf"), "{json}");
+    assert_eq!(REGISTERED.lock().unwrap()[0].kind, KIND_SERVER);
+
+    let (st, v, lines) = run(0, &[]);
+    assert_eq!((st, v), (FishStatus::OK, 1));
+    assert_eq!(
+        lines,
+        [("Alex Some(9) 2 Some([1.0, 2.0, 3.0])".to_string(), false)]
+    );
+
+    register_context(KIND_SERVER, 0)
+        .register(
+            literal("a").then(
+                argument("n", ArgKind::Integer { min: 0, max: 9 }).executes(|c| {
+                    c.feedback(&format!("n={}", c.get_integer("n")?));
+                    c.get_string("missing").map(|_| 0)
+                }),
+            ),
+        )
+        .unwrap();
+    let (_, _, lines) = run(0, &[("n", arg::INTEGER, "4")]);
+    assert_eq!(lines[0], ("n=4".to_string(), false));
+    assert_eq!(
+        lines[1],
+        ("the command has no argument \"missing\"".to_string(), true)
+    );
+}
+
+#[test]
+fn executors_report_wrong_types_bad_values_and_panics_without_unwinding() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    use crate::command::{ArgKind, CommandError, argument, literal};
+    crate::fake::install();
+    REGISTERED.lock().unwrap().clear();
+    let go = |build: crate::command::CommandBuilder, args: &[(&str, u8, &str)]| {
+        register_context(KIND_CLIENT, 1).register(build).unwrap();
+        assert_eq!(REGISTERED.lock().unwrap().last().unwrap().kind, KIND_CLIENT);
+        run(0, args)
+    };
+    let (_, _, l) = go(
+        literal("t").then(argument("x", ArgKind::Word).executes(|c| c.get_integer("x").map(|_| 0))),
+        &[("x", arg::WORD, "abc")],
+    );
+    assert_eq!(l, [("argument \"x\" has another type".to_string(), true)]);
+    let (_, _, l) = go(
+        literal("t").then(
+            argument("x", ArgKind::Integer { min: 0, max: 9 })
+                .executes(|c| c.get_double("x").map(|_| 0)),
+        ),
+        &[("x", arg::INTEGER, "5")],
+    );
+    assert_eq!(l[0].0, "argument \"x\" has another type");
+    let (_, _, l) = go(
+        literal("t").then(
+            argument("x", ArgKind::Integer { min: 0, max: 9 })
+                .executes(|c| c.get_integer("x").map(|_| 0)),
+        ),
+        &[("x", arg::INTEGER, "oops")],
+    );
+    assert_eq!(l[0].0, "argument \"x\" is not an integer");
+    let (_, _, l) = go(
+        literal("t").then(
+            argument("x", ArgKind::Double { min: 0.0, max: 1.0 })
+                .executes(|c| c.get_double("x").map(|_| 0)),
+        ),
+        &[("x", arg::DOUBLE, "zz")],
+    );
+    assert_eq!(l[0].0, "argument \"x\" is not a number");
+    let (_, _, l) = go(
+        literal("t")
+            .then(argument("x", ArgKind::BlockPos).executes(|c| c.get_block_pos("x").map(|_| 0))),
+        &[("x", arg::BLOCK_POS, "1 two 3")],
+    );
+    assert_eq!(l[0].0, "argument \"x\" is not a block position");
+    let (_, v, l) = go(
+        literal("t").executes(|_| Err(CommandError::from("nope"))),
+        &[],
+    );
+    assert_eq!((v, l), (0, vec![("nope".to_string(), true)]));
+    let (_, _, l) = go(
+        literal("t").executes(|_| Err(String::from("owned").into())),
+        &[],
+    );
+    assert_eq!(l[0].0, "owned");
+    assert_eq!(CommandError::from("shown").to_string(), "shown");
+    // an index the tree does not have
+    register_context(KIND_SERVER, 0)
+        .register(literal("t").executes(|_| Ok(0)))
+        .unwrap();
+    let (st, _, _) = run(5, &[]);
+    assert_eq!(st, FishStatus::NOT_FOUND);
+    // a panicking executor is caught at the boundary
+    register_context(KIND_SERVER, 0)
+        .register(literal("t").executes(|_| panic!("boom")))
+        .unwrap();
+    let (st, _, _) = run(0, &[]);
+    assert_eq!(st, FishStatus::PANICKED);
+}
+
+#[test]
+fn a_refused_registration_gives_the_executors_back_to_be_dropped() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    use crate::command::literal;
+    crate::fake::install();
+    REGISTERED.lock().unwrap().clear();
+    *REGISTER_STATUS.lock().unwrap() = FishStatus::INVALID_ARGUMENT;
+    let result = register_context(KIND_SERVER, 0).register(literal("t").executes(|_| Ok(0)));
+    *REGISTER_STATUS.lock().unwrap() = FishStatus::OK;
+    assert_eq!(
+        result.unwrap_err().status(),
+        Some(FishStatus::INVALID_ARGUMENT)
+    );
+    assert!(REGISTERED.lock().unwrap().is_empty());
+    assert_eq!(
+        register_context(KIND_SERVER, 1).side(),
+        crate::loader::Environment::Server
+    );
+    assert_eq!(
+        register_context(KIND_SERVER, 0).side(),
+        crate::loader::Environment::Client
+    );
+}
+
+#[test]
+fn f3_lines_are_added_through_the_host() {
+    use fish_abi::debug::DebugPayload;
+
+    unsafe extern "C" fn add(user: *mut c_void, line: FishStr) {
+        unsafe { (*user.cast::<Vec<String>>()).push(line.as_str().unwrap().to_string()) };
+    }
+    let mut lines: Vec<String> = Vec::new();
+    let p = DebugPayload {
+        size: size_of::<DebugPayload>() as u32,
+        add,
+        user: (&raw mut lines).cast(),
+    };
+    let c: crate::event::debug::DebugContext = unsafe { std::mem::transmute(p) };
+    c.add_line("one");
+    c.add_line("two");
+    assert_eq!(lines, ["one", "two"]);
 }

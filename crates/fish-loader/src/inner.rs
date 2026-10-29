@@ -126,6 +126,9 @@ pub(crate) struct Inner {
     pub sink: Option<LogSink>,
     pub warnings: Mutex<Vec<String>>,
     pub errors: Mutex<Vec<String>>,
+    pub commands: Mutex<crate::commands::Commands>,
+    /// Chat notices not shown yet (`Fish mod X stopped: reason`).
+    pub notices: Mutex<Vec<String>>,
 }
 
 /// Construction parameters of [`Inner`].
@@ -183,6 +186,8 @@ impl Inner {
                 sink,
                 warnings: Mutex::default(),
                 errors: Mutex::default(),
+                commands: Mutex::default(),
+                notices: Mutex::default(),
             }
         })
     }
@@ -239,7 +244,9 @@ impl Inner {
             *state = ModState::Failed(reason.clone());
         }
         rec.failed.store(true, Ordering::Release);
-        self.error(format!("Fish mod {} stopped: {reason}", rec.manifest.name));
+        let notice = format!("Fish mod {} stopped: {reason}", rec.manifest.name);
+        self.error(notice.clone());
+        self.notices.lock().expect("notices").push(notice);
         if panicked && self.strict {
             eprintln!(
                 "fish: mod {} panicked and FISH_LOADER_STRICT is set; aborting",
@@ -270,5 +277,9 @@ impl Drop for Inner {
     fn drop(&mut self) {
         // Listener destructors live in mod libraries: drop them before the libraries unload.
         self.bus.clear();
+        self.commands
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 }

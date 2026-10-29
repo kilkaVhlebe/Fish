@@ -6,7 +6,7 @@
 use std::fmt;
 
 use fish_abi::client::{ROLE_DEDICATED_SERVER, ROLE_INTEGRATED_SERVER};
-use fish_abi::game::{FACE_NONE, GamePayload, HAND_OFF};
+use fish_abi::game::{GamePayload, HAND_OFF};
 
 use crate::client::{ClientHandle, Role};
 use crate::event::Payload;
@@ -113,7 +113,7 @@ impl GameContext {
             3 => Face::South,
             4 => Face::West,
             5 => Face::East,
-            FACE_NONE | _ => return None,
+            _ => return None,
         })
     }
 

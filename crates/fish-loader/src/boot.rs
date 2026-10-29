@@ -243,6 +243,10 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             fish_abi::client::services::COMMAND_RAW,
             std::ptr::from_ref(&crate::client_services::COMMAND_RAW) as usize,
         ),
+        (
+            fish_abi::commands::SERVICE_COMMANDS,
+            std::ptr::from_ref(&crate::command_services::COMMANDS) as usize,
+        ),
     ] {
         inner.services.write().expect("services").insert(
             id.to_string(),
@@ -367,6 +371,34 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
         let mut state = rec.state.lock().expect("mod state");
         if *state == ModState::Loading {
             *state = ModState::Ok;
+        }
+    }
+    for (id, kind) in [
+        (
+            fish_abi::commands::ids::REGISTER,
+            fish_abi::commands::KIND_SERVER,
+        ),
+        (
+            fish_abi::commands::ids::REGISTER_CLIENT,
+            fish_abi::commands::KIND_CLIENT,
+        ),
+    ] {
+        let mut payload = fish_abi::commands::CommandRegisterPayload {
+            size: size_of::<fish_abi::commands::CommandRegisterPayload>() as u32,
+            kind,
+            side: match cfg.side {
+                Side::Client => fish_abi::services::SIDE_CLIENT,
+                Side::Server => fish_abi::services::SIDE_SERVER,
+            },
+            reserved: [0; 2],
+        };
+        if let Some(index) = inner.bus.lookup(id) {
+            // SAFETY: the payload matches the event's documented layout.
+            unsafe {
+                inner
+                    .bus
+                    .invoke(index, (&raw mut payload).cast(), std::ptr::null_mut())
+            };
         }
     }
     let ok = active.iter().filter(|r| !r.is_failed()).count();

@@ -52,3 +52,41 @@ are already in Horizon's `Cargo.lock`.
 `FISH_LOADER_SELFTEST=<report.json>` makes the edition boot, drive 20 synthetic client ticks, a frame, the HUD and a
 command through the real dispatcher, write a JSON report and exit before the game starts. CI (and
 `cargo xtask edition selftest`) checks that the `hello` example loaded and counted exactly 20 ticks.
+
+## Hook map (events of phase P6)
+
+The bridge fires these; the loader derives the rest (`client_started`, `server_started`, the first `world_load`,
+`world_unload`, `reload_end`, `block_break_after`, `block_break_canceled`, `after_damage`, `modify_send`). Where Horizon has no
+exact point, the event is **approximated**; the notes say how.
+
+| Event | Hook (HEAD unless noted) | Note |
+| --- | --- | --- |
+| `client_stopping` | `Game::save_for_exit` | once |
+| `client_stopped` | `discord_presence::stop` | detached |
+| `server_starting` | `Game::load_world` | not for `--in-frame` worlds |
+| `server_stopping` / `server_stopped` | `stop_integrated`, `stop_dedicated` / `lan_close` | stopped is gated by stopping |
+| `world_load` (other levels) | `levels::open_level` | idle-level unloads are not reported |
+| `chunk_load` / `chunk_unload` | `ChunkMap::insert` / `remove` | detached; dimension is the thread's last known; `clear` not reported |
+| `reload_start` | `reload_datapacks` (`/reload` only) | |
+| `use_block` / `use_item` / `use_entity` | `Game::use_item` | **approximated**: one of the three per click, classified by what the player aims at; `use_item` is not raised when a block is aimed at. Client predictions: `remote_use_*` |
+| `attack_entity` | `Game::attack`, `guest_attack`, `remote_start_attack` | |
+| `attack_block` | `Game::attack_block`, `remote_mining` | **approximated**: the server path only covers the punch path |
+| `block_break_before` | `break_block_as_player` | veto |
+| `pick_item` | `pick_item::pick` | |
+| `allow_damage` | `mobs::ai::accepts_damage`, `PlayerMotion::hurt_caused_by` | veto; the player's actor is the last one the game acted for and may be empty |
+| `allow_death` | inside the damage hooks when `amount >= health` | **approximated**: raw amount before armor; cancelling rejects the whole damage |
+| `after_death` | `mob_died`; players by edge detection on the next tick | the in-frame local player's death is **not reported** |
+| `player_join` / `player_leave` | `load_guest_records` / `lan_crafting_left` (+ one per player at server stop) | |
+| `after_respawn`, `copy_from` | edge detection for guests, `respawn_player` for the local player | fired together |
+| `allow_sleeping` | `try_sleep` | veto |
+| `sleep_start` / `sleep_stop` | edge detection / `wake_up` | |
+| `allow_chat`, `allow_command`, `chat`, `command` | `Hub::try_handle_chat`, `broadcast_chat`, `guest_command` | `command` fires at the allow gate, not after the command ran |
+| `allow_game` / `game` | `Hub::system_message` | **approximated**: only the broadcast message; per-player system messages are not covered |
+| `allow_receive` / `receive` | `remote::chat_line`, `chat::local_chat_line` | `receive` fires just before the line is added |
+| `allow_send`, `modify_send`, `send` | `chat::handle_chat_input`, `remote::send_chat` | rewrites re-enter the handler behind a guard |
+| commands | `commands::run_command` | the root is checked against vanilla's dispatcher; chat tab-completion of Fish commands is not wired |
+| F3 lines | RETURN `debug_overlay::Displayer::columns` | right column |
+| crash details | `crash::set_detail` from boot, every 100 ticks and at server stop | extra lines in **System Details**, not a separate section |
+
+A derived event whose own listeners are missing still raises its base event when a derived listener exists (a mod that
+listens only to `modify_send` still gets called).

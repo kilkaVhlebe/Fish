@@ -51,3 +51,20 @@ grow by appending fields. A listener compiled against a bigger payload than the 
 
 A panicking listener returns `PANICKED`; the loader marks the mod failed, logs `Fish mod <name> stopped`,
 and skips that mod's listeners from then on. Other mods' listeners keep running.
+
+## Game events
+
+The events of [lifecycle](lifecycle.md), [interaction](interaction.md), [entity](entity.md) and [messages](messages.md)
+carry one `GameContext`. Its accessors are filled per event (the others return zero or empty):
+
+| Accessor | Meaning |
+| --- | --- |
+| `client()` | the game that raised it (`ClientHandle`); fails for detached events (chunks, client stopped) |
+| `role()`, `is_client()` | which game; true for the window's prediction of a server decision |
+| `actor()`, `actor_uuid()` | the acting player |
+| `pos()`, `face()`, `hand()` | block position (chunk coordinates for chunk events), face, hand |
+| `entity_id()`, `amount()` | entity network id; damage |
+| `dimension()`, `subject()`, `item()`, `extra()` | dimension id; block, entity type, command or text; item id; qualifier |
+| `replace_text(text)` | rewrites the text of events that allow it (`message::client::MODIFY_SEND`) |
+
+Allow events use `ActionResult`: `Fail` cancels. The first listener that does not return `Pass` decides.

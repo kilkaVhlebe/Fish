@@ -3,7 +3,7 @@
 //! Each method raises the same [`GameEvent`]s, in the same order, as the bridge does in the
 //! edition, so a script exercises the mod's listeners exactly like the game would.
 
-use fish_hooks::{Dispatch, GameEvent, Kind, Outcome, Role};
+use fish_hooks::{CommandOutcome, CommandSource, Dispatch, GameEvent, Kind, Outcome, Role};
 use fish_loader::Side;
 
 use crate::TestHost;
@@ -66,9 +66,8 @@ impl TestHost {
         } else {
             dispatch.game_event(Some(&mut view), &e)
         };
-        let line = format!("{name} {}", outcome_name(&outcome));
         self.sim.last_outcome = outcome_name(&outcome);
-        self.sim.events.push(line);
+        self.drain_trace();
         outcome
     }
 
@@ -80,22 +79,76 @@ impl TestHost {
         e
     }
 
-    /// Fires the lifecycle events of a server start (`starting`, the first tick, `started`,
-    /// `world_load`) and of the client's start.
+    /// Starts the game: `server_starting`, the server's first tick (which fires `world_load` and
+    /// `server_started`) and the first frame (`client_started`).
     pub fn start_game(&mut self) {
         self.game_event(&Self::at(Kind::ServerStarting));
-        self.game_event(&Self::at(Kind::WorldLoad));
-        self.game_event(&Self::at(Kind::ServerStarted));
-        self.game_event(&Self::at(Kind::ClientStarted));
+        self.tick_integrated_server(1);
+        self.frame(1);
     }
 
-    /// Fires the stop events: server `stopping`, `world_unload`, `stopped`, then the client's.
+    /// Stops the game: `client_stopping`, `server_stopping` (the loader then fires `world_unload`
+    /// for every loaded level), `server_stopped`, `client_stopped`.
     pub fn stop_game(&mut self) {
         self.game_event(&Self::at(Kind::ClientStopping));
         self.game_event(&Self::at(Kind::ServerStopping));
-        self.game_event(&Self::at(Kind::WorldUnload));
         self.game_event(&Self::at(Kind::ServerStopped));
         self.game_event(&Self::at(Kind::ClientStopped));
+    }
+
+    /// `actor` (permission `level`) types `line` (no slash) on the server: Fish commands run through
+    /// the loader. The messages are added to `sim.command_feedback`; `sim.command_ok` records the
+    /// result of a handled command. A line that is not a Fish command comes back unhandled.
+    pub fn server_command(&mut self, actor: &str, level: u8, line: &str) -> CommandOutcome {
+        let role = self.server_role();
+        let uuid = uuid_of(actor);
+        let (mut view, dispatch) = self.view(role);
+        let source = CommandSource {
+            name: actor,
+            uuid,
+            level,
+            is_player: true,
+            pos: Some([0.5, 64.0, 0.5]),
+        };
+        let outcome = dispatch.run_command(&mut view, &source, line);
+        if outcome.handled {
+            self.sim.command_ok = Some(outcome.ok);
+            self.sim
+                .command_feedback
+                .extend(outcome.messages.iter().cloned());
+        }
+        self.drain_trace();
+        outcome
+    }
+
+    /// The lines the F3 screen would show from Fish and its mods.
+    pub fn debug_lines(&mut self) -> Vec<String> {
+        let role = self.game_role();
+        let (_, dispatch) = self.view(role);
+        let mut out = Vec::new();
+        dispatch.debug_lines(&mut out);
+        out
+    }
+
+    /// Whether any mod listens to `kind` (what hot hooks ask before doing work).
+    pub fn wants(&mut self, kind: Kind) -> bool {
+        let role = self.game_role();
+        let (_, dispatch) = self.view(role);
+        dispatch.wants(kind)
+    }
+
+    /// Completions of `line` for a player of permission `level`.
+    pub fn suggest(&mut self, level: u8, line: &str) -> Vec<String> {
+        let role = self.server_role();
+        let (_, dispatch) = self.view(role);
+        let source = CommandSource {
+            name: PLAYER,
+            uuid: uuid_of(PLAYER),
+            level,
+            is_player: true,
+            pos: None,
+        };
+        dispatch.suggest_command(&source, line)
     }
 
     /// A player joins.
@@ -158,21 +211,19 @@ impl TestHost {
     }
 
     /// The player breaks the block at `pos`: `block_break_before`, then either `canceled` (when a
-    /// listener cancelled) or the break itself, whose `block_break_after` fires on the next tick.
+    /// listener cancelled) or the break itself, whose `block_break_after` the loader fires on the next server tick.
     /// Returns true when the block broke.
     pub fn break_block(&mut self, pos: [i32; 3], block: &str) -> bool {
         let mut e = Self::at(Kind::BlockBreakBefore);
         e.pos = pos;
         e.subject = block;
         if self.game_event(&e).cancelled() {
-            e.kind = Kind::BlockBreakCanceled;
-            self.game_event(&e);
+            // the loader fires `block_break_canceled` itself
             return false;
         }
         self.sim
             .broken
             .push(format!("{} {} {} {block}", pos[0], pos[1], pos[2]));
-        self.sim.pending_after.push((pos, block.to_string()));
         true
     }
 
@@ -184,12 +235,8 @@ impl TestHost {
         e.amount = amount;
         e.extra = source;
         e.dimension = OVERWORLD;
-        if self.game_event(&e).cancelled() {
-            return false;
-        }
-        e.kind = Kind::AfterDamage;
-        self.game_event(&e);
-        true
+        // the loader fires `after_damage` when nobody cancelled
+        !self.game_event(&e).cancelled()
     }
 
     /// A living entity dies; returns true when it died.
@@ -209,7 +256,6 @@ impl TestHost {
     /// `/reload`: `reload_start` now, `reload_end` on the next tick.
     pub fn reload(&mut self) {
         self.game_event(&Self::at(Kind::ReloadStart));
-        self.sim.pending_reload_end = true;
     }
 
     /// A player's chat message reaches the server: `allow_chat`, then `chat` and the broadcast.
@@ -233,17 +279,13 @@ impl TestHost {
     pub fn chat_out(&mut self, text: &str) -> Option<String> {
         let mut e = GameEvent::new(Kind::AllowSend);
         e.subject = text;
-        if self.game_event(&e).cancelled() {
-            return None;
-        }
-        e.kind = Kind::ModifySend;
-        e.rewritable = true;
+        // `allow_send` then `modify_send` are one flow in the loader; its outcome is the rewrite
         let sent = match self.game_event(&e) {
+            Outcome::Cancel => return None,
             Outcome::Replace(t) => t,
             _ => text.to_string(),
         };
         e.kind = Kind::Send;
-        e.rewritable = false;
         e.subject = &sent;
         self.game_event(&e);
         self.sim.sent_chat.push(sent.clone());
@@ -262,18 +304,5 @@ impl TestHost {
         self.game_event(&e);
         self.sim.received.push(text.to_string());
         true
-    }
-
-    /// Fires what is due after a tick: `reload_end` and the `block_break_after` of earlier breaks.
-    pub(crate) fn after_tick(&mut self) {
-        if std::mem::take(&mut self.sim.pending_reload_end) {
-            self.game_event(&Self::at(Kind::ReloadEnd));
-        }
-        for (pos, block) in std::mem::take(&mut self.sim.pending_after) {
-            let mut e = Self::at(Kind::BlockBreakAfter);
-            e.pos = pos;
-            e.subject = &block;
-            self.game_event(&e);
-        }
     }
 }

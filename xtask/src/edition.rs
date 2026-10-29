@@ -148,6 +148,18 @@ pub fn assemble_bundle(root: &Path, cfg: &FishConfig) -> Result<PathBuf> {
         bundle.join("modules/bridge.rs"),
         assemble_bridge(&from.join("modules/bridge"))?,
     )?;
+    // Single-file support modules (`modules/<name>.rs`) go through unchanged.
+    for entry in fs::read_dir(from.join("modules"))? {
+        let path = entry?.path();
+        if path.extension().is_some_and(|e| e == "rs") {
+            fs::copy(
+                &path,
+                bundle
+                    .join("modules")
+                    .join(path.file_name().context("module name")?),
+            )?;
+        }
+    }
     Ok(parent)
 }
 
@@ -408,8 +420,8 @@ pub fn package(root: &Path, cfg: &FishConfig, profile: Profile) -> Result<PathBu
     Ok(out)
 }
 
-/// Builds `hello.fish` with cargo-fish; returns its path.
-pub fn build_hello(root: &Path) -> Result<PathBuf> {
+/// Builds the example mod in `examples/mods/<dir>` with cargo-fish; returns its `.fish`.
+pub fn build_example_mod(root: &Path, dir: &str, file: &str) -> Result<PathBuf> {
     crate::run(root, "cargo", &["build", "--locked", "-p", "cargo-fish"])?;
     let exe = if cfg!(windows) {
         "cargo-fish.exe"
@@ -417,14 +429,19 @@ pub fn build_hello(root: &Path) -> Result<PathBuf> {
         "cargo-fish"
     };
     let status = Command::new(root.join("target/debug").join(exe))
-        .current_dir(root.join("examples/mods/hello"))
+        .current_dir(root.join("examples/mods").join(dir))
         .args(["fish", "build"])
         .status()
         .context("running cargo-fish build")?;
     if !status.success() {
-        bail!("building hello.fish failed");
+        bail!("building {dir} failed");
     }
-    Ok(root.join("target/fish/hello-0.1.0.fish"))
+    Ok(root.join("target/fish").join(file))
+}
+
+/// Builds `hello.fish` with cargo-fish; returns its path.
+pub fn build_hello(root: &Path) -> Result<PathBuf> {
+    build_example_mod(root, "hello", "hello-0.1.0.fish")
 }
 
 /// Runs the edition binary's self test with the hello mod; returns the report.
@@ -579,6 +596,27 @@ pub fn log_lines_with<'a>(log: &'a str, needle: &str) -> Vec<&'a str> {
     log.lines().filter(|l| l.contains(needle)).collect()
 }
 
+/// The block `distance` blocks along the view of `player` (its `eye`, `yaw` and `pitch` as
+/// `horizon-ctl state` reports them), from the eyes.
+pub fn block_ahead(player: &serde_json::Value, distance: f64) -> Option<[i64; 3]> {
+    let eye = player["eye"].as_array()?;
+    let eye = [
+        eye.first()?.as_f64()?,
+        eye.get(1)?.as_f64()?,
+        eye.get(2)?.as_f64()?,
+    ];
+    let (yaw, pitch) = (
+        player["yaw"].as_f64()?.to_radians(),
+        player["pitch"].as_f64()?.to_radians(),
+    );
+    let dir = [
+        -yaw.sin() * pitch.cos(),
+        -pitch.sin(),
+        yaw.cos() * pitch.cos(),
+    ];
+    Some([0, 1, 2].map(|i| (eye[i] + dir[i] * distance).floor() as i64))
+}
+
 /// Checks the e2e expectations against `latest.log`: the hello mod's tick 100 and its command.
 pub fn verify_e2e_log(log: &str) -> Result<()> {
     let tick = log_lines_with(log, "tick 100");
@@ -587,6 +625,67 @@ pub fn verify_e2e_log(log: &str) -> Result<()> {
     }
     if log_lines_with(log, "Fish says hello").is_empty() {
         bail!("latest.log has no `Fish says hello` line");
+    }
+    Ok(())
+}
+
+/// Checks what the `events_demo` mod logged during the e2e scenarios: the lifecycle and join events,
+/// the chat filter and rewrite, the block-break veto and the data reload.
+pub fn verify_events_log(log: &str) -> Result<()> {
+    let demo = |needle: &str| {
+        log.lines()
+            .any(|l| l.contains("[fish/events_demo]") && l.contains(needle))
+    };
+    for needle in [
+        "client started",
+        "server starting: FishE2E",
+        "world loaded: minecraft:overworld",
+        "server started",
+        "welcome ",
+        "dropped a message from",
+        "refusing to break bedrock",
+        "break canceled at",
+        "reload started",
+        "reload finished",
+    ] {
+        if !demo(needle) {
+            bail!("latest.log has no `[fish/events_demo] ... {needle} ...` line");
+        }
+    }
+    if !log
+        .lines()
+        .any(|l| l.contains("[CHAT]") && l.contains("hello ><> world"))
+    {
+        bail!("the chat line with `:fish:` was not rewritten to `><>`");
+    }
+    if log
+        .lines()
+        .any(|l| l.contains("[CHAT]") && l.contains("badword"))
+    {
+        bail!("the chat line with `badword` was not dropped");
+    }
+    Ok(())
+}
+
+/// What a clean shutdown of the e2e game logged: server stopping and stopped, the player leaving,
+/// then the client stopping and stopped.
+pub fn verify_shutdown_log(log: &str) -> Result<()> {
+    let mut at = 0;
+    for needle in [
+        "server stopping",
+        "goodbye ",
+        "server stopped",
+        "client stopping",
+        "client stopped",
+    ] {
+        let Some(i) = log
+            .lines()
+            .skip(at)
+            .position(|l| l.contains("[fish/events_demo]") && l.contains(needle))
+        else {
+            bail!("latest.log has no `[fish/events_demo] ... {needle} ...` line in order");
+        };
+        at += i + 1;
     }
     Ok(())
 }
@@ -681,6 +780,8 @@ pub fn e2e(
     }
     let _ = cfg;
     let hello = build_hello(root)?;
+    let demo = build_example_mod(root, "events-demo", "events_demo-0.1.0.fish")?;
+    let mods = std::env::join_paths([&hello, &demo]).context("joining the mod paths")?;
     let scratch = root.join("target/e2e");
     if scratch.exists() {
         fs::remove_dir_all(&scratch)?;
@@ -702,8 +803,11 @@ pub fn e2e(
         ])
         .arg(resources)
         .arg("--no-pause")
+        // The game keeps its saves and options in its working directory: the scratch one, so a
+        // run always starts a fresh world and leaves the repository alone.
+        .current_dir(&scratch)
         .env("HORIZON_HOME", &home)
-        .env("FISH_LOADER_ADD_MODS", &hello);
+        .env("FISH_LOADER_ADD_MODS", &mods);
     let launched = output_within(launch_cmd, 600).and_then(|out| {
         if out.status.success() {
             Ok(())
@@ -719,7 +823,34 @@ pub fn e2e(
     let outcome = launched.and_then(|()| {
         ctl(horizon_ctl, &home, &["wait", "200"])?;
         ctl(horizon_ctl, &home, &["command", "fish hello"])?;
+        // Chat: one line the demo drops, one it rewrites.
+        ctl(horizon_ctl, &home, &["chat", "this has a badword in it"])?;
+        ctl(horizon_ctl, &home, &["chat", "hello :fish: world"])?;
+        // A Fish command registered on the server, run as the player (feedback comes back as chat).
+        let feedback = ctl(horizon_ctl, &home, &["command", "fishdemo hello"])?;
+        if !feedback.contains("hello ") {
+            bail!("`fishdemo hello` gave no feedback: {feedback}");
+        }
+        let failure = ctl(horizon_ctl, &home, &["command", "fishdemo fail"])?;
+        if !failure.contains("on purpose") {
+            bail!("`fishdemo fail` did not report its error: {failure}");
+        }
+        // Bedrock two blocks along the view from the eyes (the crosshair's block), then mined: the
+        // demo vetoes the break.
+        let state: serde_json::Value = serde_json::from_str(&ctl(horizon_ctl, &home, &["state"])?)
+            .context("parsing horizon-ctl state")?;
+        let at =
+            block_ahead(&state["player"], 2.0).context("the player's eye and view in `state`")?;
+        let place = format!("setblock {} {} {} minecraft:bedrock", at[0], at[1], at[2]);
+        ctl(horizon_ctl, &home, &["command", &place])?;
         ctl(horizon_ctl, &home, &["wait", "5"])?;
+        ctl(horizon_ctl, &home, &["mouse", "left", "click"])?;
+        ctl(horizon_ctl, &home, &["wait", "10"])?;
+        // A data reload, then the F3 screen (it lists `events-demo is listening`) for the screenshot.
+        ctl(horizon_ctl, &home, &["command", "reload"])?;
+        ctl(horizon_ctl, &home, &["wait", "40"])?;
+        ctl(horizon_ctl, &home, &["key", "f3", "tap"])?;
+        ctl(horizon_ctl, &home, &["wait", "30"])?;
         let shot = scratch.join("e2e.png");
         ctl(
             horizon_ctl,
@@ -728,14 +859,24 @@ pub fn e2e(
         )?;
         let log = fs::read_to_string(home.join("logs/latest.log")).context("reading latest.log")?;
         verify_e2e_log(&log)?;
+        verify_events_log(&log)?;
         if !shot.is_file() {
             bail!("no screenshot was written to {}", shot.display());
         }
         Ok(())
     });
-    // Whatever happened, do not leave a game window open.
+    // Whatever happened, do not leave a game window open; a clean quit logs the shutdown events.
     let _ = ctl(horizon_ctl, &home, &["quit"]);
-    outcome
+    outcome.and_then(|()| {
+        for _ in 0..40 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let log = fs::read_to_string(home.join("logs/latest.log")).unwrap_or_default();
+            if log.contains("client stopped") {
+                return verify_shutdown_log(&log);
+            }
+        }
+        bail!("the game did not log `client stopped` after quit")
+    })
 }
 
 #[cfg(test)]
@@ -902,6 +1043,66 @@ mod tests {
                 .contains("Fish says hello")
         );
         assert_eq!(log_lines_with("a\nb c\nc", "c"), ["b c", "c"]);
+    }
+
+    #[test]
+    fn the_block_ahead_follows_the_view() {
+        let player = serde_json::json!({
+            "eye": [-29.5, 66.62, 0.5], "yaw": -163.8, "pitch": -0.9
+        });
+        assert_eq!(block_ahead(&player, 2.0), Some([-29, 66, -2]));
+        assert_eq!(block_ahead(&serde_json::json!({}), 2.0), None);
+    }
+
+    #[test]
+    fn events_log_expectations() {
+        let line = |s: &str| format!("[12:00:00] [Server thread/INFO]: [fish/events_demo] {s}\n");
+        let mut log = String::new();
+        for s in [
+            "client started",
+            "server starting: FishE2E",
+            "world loaded: minecraft:overworld",
+            "server started",
+            "welcome Bob",
+            "dropped a message from Bob",
+            "refusing to break bedrock at 1 2 3",
+            "break canceled at 1 2 3",
+            "reload started",
+            "reload finished",
+        ] {
+            log += &line(s);
+        }
+        assert!(
+            verify_events_log(&log)
+                .unwrap_err()
+                .to_string()
+                .contains("`:fish:`")
+        );
+        log += "[12:00:01] [Render thread/INFO]: [CHAT] <Bob> hello ><> world\n";
+        assert!(verify_events_log(&log).is_ok());
+        let missing = log.replace("reload finished", "x");
+        assert!(
+            verify_events_log(&missing)
+                .unwrap_err()
+                .to_string()
+                .contains("reload finished")
+        );
+        let dropped = format!("{log}[CHAT] <Bob> a badword\n");
+        assert!(verify_events_log(&dropped).is_err());
+
+        let mut down = String::new();
+        for s in [
+            "server stopping",
+            "goodbye Bob",
+            "server stopped",
+            "client stopping",
+            "client stopped",
+        ] {
+            down += &line(s);
+        }
+        assert!(verify_shutdown_log(&down).is_ok());
+        let shuffled = format!("{}{}", line("client stopped"), line("server stopping"));
+        assert!(verify_shutdown_log(&shuffled).is_err());
     }
 
     #[test]

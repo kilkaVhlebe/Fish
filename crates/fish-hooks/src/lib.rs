@@ -66,7 +66,7 @@ pub trait ClientView {
 }
 
 /// Who typed a command.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CommandSource<'a> {
     /// The player's name (empty for the console).
     pub name: &'a str,
@@ -76,6 +76,8 @@ pub struct CommandSource<'a> {
     pub level: u8,
     /// True for a player, false for the server console or a command block.
     pub is_player: bool,
+    /// Where the source stands, for relative coordinates (`~`).
+    pub pos: Option<[f64; 3]>,
 }
 
 /// What running a command line through Fish produced.
@@ -421,6 +423,10 @@ pub trait Dispatch: Send + Sync {
     ) -> CommandOutcome {
         CommandOutcome::default()
     }
+    /// Completions for the word being typed in `line` (static suggestion lists and literals).
+    fn suggest_command(&self, _source: &CommandSource<'_>, _line: &str) -> Vec<String> {
+        Vec::new()
+    }
     /// The root names of every command Fish registered (for conflict checks against vanilla).
     fn command_roots(&self) -> Vec<String> {
         Vec::new()
@@ -429,6 +435,10 @@ pub trait Dispatch: Send + Sync {
     fn shadowed_command(&self, _root: &str) {}
     /// Lines appended to the F3 screen.
     fn debug_lines(&self, _out: &mut Vec<String>) {}
+    /// Lines for the crash report's details (`key`, `value`): the Fish version, the mods, the failed mods.
+    fn crash_details(&self) -> Vec<(&'static str, String)> {
+        Vec::new()
+    }
     /// Options > Mods rows for Fish mods.
     fn list_mods(&self, _rows: &mut Vec<NativeModRow>) {}
     /// The settings buttons of mod `mod_id`'s page.
@@ -508,13 +518,27 @@ mod tests {
                     name: "a",
                     uuid: [0; 16],
                     level: 0,
-                    is_player: true
+                    is_player: true,
+                    pos: None
                 },
                 "x"
             ),
             CommandOutcome::default()
         );
         assert!(d.command_roots().is_empty());
+        assert!(
+            d.suggest_command(
+                &CommandSource {
+                    name: "a",
+                    uuid: [0; 16],
+                    level: 0,
+                    is_player: true,
+                    pos: None
+                },
+                "x"
+            )
+            .is_empty()
+        );
         d.shadowed_command("x");
         assert_eq!(v.level_id(), "minecraft:overworld");
         assert!(!d.client_command(&mut v, "fish hello"));

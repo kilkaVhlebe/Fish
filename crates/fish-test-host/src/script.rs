@@ -10,7 +10,7 @@
 //! ```
 //!
 //! Unknown keys are errors. Within a step the actions run in a fixed order: `key`, `command`,
-//! `chat`, `ticks`, `frames`; then `expect` is checked. Later phases add keys.
+//! `chat`, the game events, `ticks`, `server_ticks`, `frames`; then `expect` is checked. Later phases add keys.
 
 use std::fmt;
 
@@ -62,6 +62,8 @@ pub struct Expect {
     /// Substrings that must appear in `x y z block` of broken blocks.
     #[serde(default)]
     pub broken: Vec<String>,
+    /// Whether the step's last handled server command must have succeeded.
+    pub command_ok: Option<bool>,
     /// Substrings that must appear in the event log (`group/name outcome`).
     #[serde(default)]
     pub events: Vec<String>,
@@ -120,6 +122,24 @@ pub struct EntityStep {
 
 fn one() -> i64 {
     1
+}
+
+/// A command typed on the server.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServerCommand {
+    /// The line, without a slash.
+    pub line: String,
+    /// The player's permission level (default 4).
+    #[serde(default = "owner")]
+    pub level: u8,
+    /// Who types it.
+    #[serde(default = "steve")]
+    pub actor: String,
+}
+
+fn owner() -> u8 {
+    4
 }
 
 /// A chat message reaching the server.
@@ -192,6 +212,8 @@ pub struct EventStep {
 pub struct Step {
     /// Client ticks to advance.
     pub ticks: Option<u32>,
+    /// Ticks of the integrated server to advance (a second game next to the window).
+    pub server_ticks: Option<u32>,
     /// Frames to render.
     pub frames: Option<u32>,
     /// A client command, without a leading `/`.
@@ -222,6 +244,8 @@ pub struct Step {
     pub chat_out: Option<String>,
     /// A chat line arrives at the client.
     pub chat_received: Option<ChatReceived>,
+    /// A command typed on the server (Fish command trees).
+    pub server_command: Option<ServerCommand>,
     /// `/reload` runs.
     pub reload: Option<bool>,
     /// The game starts (`true`) or stops (`false`).
@@ -333,6 +357,9 @@ fn game_actions(host: &mut TestHost, step: &Step) {
     if let Some(c) = &step.chat_received {
         host.chat_received(&c.text, &c.source);
     }
+    if let Some(c) = &step.server_command {
+        host.server_command(&c.actor, c.level, &c.line);
+    }
     if step.reload == Some(true) {
         host.reload();
     }
@@ -371,9 +398,13 @@ pub fn run(host: &mut TestHost, script: &Script) -> Result<(), ScriptFailure> {
         if let Some(t) = step.ticks {
             host.tick(t);
         }
+        if let Some(t) = step.server_ticks {
+            host.tick_integrated_server(t);
+        }
         if let Some(f) = step.frames {
             host.frame(f);
         }
+        host.drain_trace();
         let Some(expect) = &step.expect else { continue };
         let logs: Vec<String> = host.logs().into_iter().map(|r| r.message).collect();
         let checks: [(&str, &[String], &[String]); 8] = [
@@ -422,6 +453,16 @@ pub fn run(host: &mut TestHost, script: &Script) -> Result<(), ScriptFailure> {
                 what: "expect.no_events".to_string(),
                 expected: format!("no event log line containing {bad:?}"),
                 actual: format!("{:?}", host.sim.events),
+            });
+        }
+        if let Some(want) = expect.command_ok
+            && host.sim.command_ok != Some(want)
+        {
+            return Err(ScriptFailure {
+                step: n,
+                what: "expect.command_ok".to_string(),
+                expected: want.to_string(),
+                actual: format!("{:?}", host.sim.command_ok),
             });
         }
         if let Some(want) = &expect.outcome

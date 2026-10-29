@@ -8,7 +8,7 @@ use horizon_client::hud::HudBatch;
 use crate::game::Game;
 use crate::game::execution_role::ExecutionRole;
 
-fn role_of(game: &Game<'_>) -> Role {
+pub(in crate::game) fn role_of(game: &Game<'_>) -> Role {
     match game.options.execution_role {
         ExecutionRole::Client => Role::Window,
         ExecutionRole::IntegratedServer => Role::IntegratedServer,
@@ -57,6 +57,10 @@ impl ClientView for GameView<'_, '_> {
 
     fn game_dir(&self) -> PathBuf {
         dir_of(self.game)
+    }
+
+    fn level_id(&self) -> String {
+        self.game.dim.id().to_string()
     }
 }
 

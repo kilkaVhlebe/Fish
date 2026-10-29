@@ -53,3 +53,41 @@ horizon-mixins отклоняет цели с непрозрачными мак�
 `FISH_LOADER_SELFTEST=<report.json>` заставляет издание загрузиться, прогнать 20 синтетических клиентских тиков,
 кадр, HUD и команду через настоящий диспетчер, записать JSON-отчёт и выйти до старта игры. CI (и
 `cargo xtask edition selftest`) проверяет, что пример `hello` загрузился и насчитал ровно 20 тиков.
+
+## Карта хуков (события фазы P6)
+
+Мост шлёт эти события; остальные выводит загрузчик (`client_started`, `server_started`, первый `world_load`,
+`world_unload`, `reload_end`, `block_break_after`, `block_break_canceled`, `after_damage`, `modify_send`). Если в Horizon нет точной
+точки, событие **приближено**; примечания говорят как.
+
+| Событие | Хук (HEAD, если не сказано иное) | Примечание |
+| --- | --- | --- |
+| `client_stopping` | `Game::save_for_exit` | один раз |
+| `client_stopped` | `discord_presence::stop` | без вида игры |
+| `server_starting` | `Game::load_world` | не для миров `--in-frame` |
+| `server_stopping` / `server_stopped` | `stop_integrated`, `stop_dedicated` / `lan_close` | stopped включается после stopping |
+| `world_load` (другие уровни) | `levels::open_level` | выгрузка простаивающих уровней не сообщается |
+| `chunk_load` / `chunk_unload` | `ChunkMap::insert` / `remove` | без вида игры; измерение — последнее известное потоку; `clear` не сообщается |
+| `reload_start` | `reload_datapacks` (только `/reload`) | |
+| `use_block` / `use_item` / `use_entity` | `Game::use_item` | **приближено**: одно из трёх на клик по тому, куда целится игрок; `use_item` не приходит, если целится в блок. Предсказания клиента: `remote_use_*` |
+| `attack_entity` | `Game::attack`, `guest_attack`, `remote_start_attack` | |
+| `attack_block` | `Game::attack_block`, `remote_mining` | **приближено**: серверный путь покрывает только удар по блоку |
+| `block_break_before` | `break_block_as_player` | запрет |
+| `pick_item` | `pick_item::pick` | |
+| `allow_damage` | `mobs::ai::accepts_damage`, `PlayerMotion::hurt_caused_by` | запрет; «актёр» игрока — последний, для кого действовала игра, может быть пустым |
+| `allow_death` | внутри хуков урона при `amount >= health` | **приближено**: сырой урон до брони; отмена отвергает весь урон |
+| `after_death` | `mob_died`; игроки — по смене состояния на следующем тике | смерть локального игрока in-frame **не сообщается** |
+| `player_join` / `player_leave` | `load_guest_records` / `lan_crafting_left` (+ по одному на игрока при остановке сервера) | |
+| `after_respawn`, `copy_from` | смена состояния для гостей, `respawn_player` для локального игрока | приходят вместе |
+| `allow_sleeping` | `try_sleep` | запрет |
+| `sleep_start` / `sleep_stop` | смена состояния / `wake_up` | |
+| `allow_chat`, `allow_command`, `chat`, `command` | `Hub::try_handle_chat`, `broadcast_chat`, `guest_command` | `command` приходит на этапе проверки, а не после выполнения |
+| `allow_game` / `game` | `Hub::system_message` | **приближено**: только общее сообщение; персональные системные сообщения не покрыты |
+| `allow_receive` / `receive` | `remote::chat_line`, `chat::local_chat_line` | `receive` приходит перед добавлением строки |
+| `allow_send`, `modify_send`, `send` | `chat::handle_chat_input`, `remote::send_chat` | переписанная строка входит в обработчик заново под защитой от рекурсии |
+| команды | `commands::run_command` | корень сверяется с диспетчером ванили; автодополнение Fish-команд в чате не подключено |
+| строки F3 | RETURN `debug_overlay::Displayer::columns` | правая колонка |
+| данные о падении | `crash::set_detail` при загрузке, каждые 100 тиков и при остановке сервера | дополнительные строки в **System Details**, а не отдельный раздел |
+
+Выводимое событие без собственных слушателей всё равно поднимает базовое событие, если есть слушатель выводимого (мод,
+слушающий только `modify_send`, всё равно будет вызван).

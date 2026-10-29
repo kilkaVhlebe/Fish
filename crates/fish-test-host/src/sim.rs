@@ -29,6 +29,8 @@ pub struct Sim {
     pub command_feedback: Vec<String>,
     /// The simulated player; `None` simulates the main menu.
     pub player: Option<PlayerSnapshot>,
+    /// Whether the last handled server command succeeded.
+    pub command_ok: Option<bool>,
     /// Every game event raised, as `group/name outcome`.
     pub events: Vec<String>,
     /// The outcome of the last game event (`pass`, `handled`, `cancel`, `replace:<text>`).
@@ -41,8 +43,6 @@ pub struct Sim {
     pub broken: Vec<String>,
     /// Players currently joined.
     pub players: BTreeSet<String>,
-    pub(crate) pending_after: Vec<([i32; 3], String)>,
-    pub(crate) pending_reload_end: bool,
 }
 
 impl Default for Sim {
@@ -56,14 +56,13 @@ impl Default for Sim {
             chat: Vec::new(),
             hud: Vec::new(),
             command_feedback: Vec::new(),
+            command_ok: None,
             events: Vec::new(),
             last_outcome: String::new(),
             broadcast: Vec::new(),
             received: Vec::new(),
             broken: Vec::new(),
             players: BTreeSet::new(),
-            pending_after: Vec::new(),
-            pending_reload_end: false,
             player: Some(PlayerSnapshot {
                 x: 0.5,
                 y: 64.0,

@@ -17,6 +17,8 @@
 #![deny(missing_docs)]
 
 pub mod client;
+pub mod commands;
+pub mod debug;
 pub mod game;
 pub mod ident;
 pub mod services;

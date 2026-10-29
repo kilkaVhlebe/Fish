@@ -137,10 +137,21 @@ fn mods_are_listed_for_options_mods() {
     let dispatch = LoaderDispatch::new(host.loader().clone());
     let mut rows = Vec::new();
     dispatch.list_mods(&mut rows);
-    assert_eq!(rows.len(), 1, "failed mods are not listed");
+    assert_eq!(rows.len(), 2, "failed mods are listed as stopped");
+    rows.sort_by(|a, b| b.id.cmp(&a.id));
     assert_eq!(rows[0].id, "hello");
     assert_eq!(rows[0].title, "Hello 0.1.0 [Fish]");
     assert!(rows[0].description.contains("Fish example mod"));
+    assert!(
+        rows[1].title.ends_with("[Fish] (stopped)"),
+        "{}",
+        rows[1].title
+    );
+    assert!(
+        rows[1].description.starts_with("Stopped: "),
+        "{}",
+        rows[1].description
+    );
     let mut buttons = Vec::new();
     dispatch.settings_buttons("hello", &mut buttons);
     assert!(buttons.is_empty());
@@ -156,4 +167,80 @@ fn a_panicking_mod_listener_does_not_break_the_hook() {
     host.tick(5);
     host.frame(2);
     assert_eq!(host.sim.hud, ["Hello from Fish"]);
+}
+
+#[repr(C)]
+struct Ping {
+    size: u32,
+    flag: u32,
+}
+
+// SAFETY: repr(C) with a leading `size: u32`.
+unsafe impl fish_api::event::Payload for Ping {}
+
+#[test]
+fn a_stopped_mod_is_announced_in_chat_once_and_marked_in_the_list() {
+    let mut host = TestHost::new()
+        .add_mod(build_example("hello"))
+        .add_mod(build_example("panicky"))
+        .boot()
+        .unwrap();
+    host.tick(1);
+    assert!(host.sim.chat.is_empty(), "{:?}", host.sim.chat);
+    host.fire(
+        "hello:ping",
+        &mut Ping {
+            size: size_of::<Ping>() as u32,
+            flag: 1,
+        },
+    );
+    host.tick(1);
+    assert_eq!(host.sim.chat.len(), 1, "{:?}", host.sim.chat);
+    assert!(
+        host.sim.chat[0].starts_with("Fish mod Panicky stopped: "),
+        "{:?}",
+        host.sim.chat
+    );
+    host.tick(3);
+    assert_eq!(host.sim.chat.len(), 1, "announced once");
+    let dispatch = LoaderDispatch::new(host.loader().clone());
+    let mut rows = Vec::new();
+    dispatch.list_mods(&mut rows);
+    let row = rows.iter().find(|r| r.id == "panicky").unwrap();
+    assert_eq!(row.title, "Panicky 0.1.0 [Fish] (stopped)");
+    assert!(
+        row.description.contains("hello:ping"),
+        "{}",
+        row.description
+    );
+}
+
+#[test]
+fn crash_details_name_fish_the_running_mods_and_the_failed_ones() {
+    let host = TestHost::new()
+        .add_mod(build_example("hello"))
+        .add_mod(build_example("panicky"))
+        .boot()
+        .unwrap();
+    let dispatch = LoaderDispatch::new(host.loader().clone());
+    let details: std::collections::HashMap<_, _> = dispatch.crash_details().into_iter().collect();
+    assert!(
+        details["Fish"].starts_with("0.1.0 (ABI 0.1) on Horizon "),
+        "{details:?}"
+    );
+    assert_eq!(details["Fish mods"], "hello 0.1.0, panicky 0.1.0");
+    assert_eq!(details["Fish failed mods"], "none");
+    host.fire(
+        "hello:ping",
+        &mut Ping {
+            size: size_of::<Ping>() as u32,
+            flag: 1,
+        },
+    );
+    let details: std::collections::HashMap<_, _> = dispatch.crash_details().into_iter().collect();
+    assert_eq!(details["Fish mods"], "hello 0.1.0");
+    assert!(
+        details["Fish failed mods"].starts_with("panicky 0.1.0 ("),
+        "{details:?}"
+    );
 }

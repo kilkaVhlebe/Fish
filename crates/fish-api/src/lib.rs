@@ -13,6 +13,7 @@
 #![deny(missing_docs)]
 
 pub mod client;
+pub mod command;
 pub mod event;
 pub mod game;
 pub mod loader;

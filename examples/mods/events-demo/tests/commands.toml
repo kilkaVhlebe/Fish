@@ -1,0 +1,64 @@
+name = "events-demo registers Brigadier-style commands"
+
+[[step]]
+server_command = { line = "fishdemo hello", actor = "Alex" }
+[step.expect]
+command_feedback = ["hello Alex"]
+command_ok = true
+
+[[step]]
+server_command = { line = "fishdemo add 2 3" }
+[step.expect]
+command_feedback = ["sum = 5"]
+command_ok = true
+
+[[step]]
+server_command = { line = "fishdemo add 200 1" }
+[step.expect]
+command_feedback = ["Integer must not be more than 100, found 200 at position 13"]
+command_ok = false
+
+[[step]]
+server_command = { line = "fishdemo add x 1" }
+[step.expect]
+command_feedback = ["Expected integer, found \"x\""]
+command_ok = false
+
+[[step]]
+server_command = { line = "fishdemo add 1" }
+[step.expect]
+command_feedback = ["Unknown or incomplete command: fishdemo add 1<--[HERE]"]
+command_ok = false
+
+[[step]]
+server_command = { line = "fishdemo say hello there", level = 0 }
+[step.expect]
+command_feedback = ["Unknown or incomplete command: fishdemo <--[HERE]"]
+command_ok = false
+
+[[step]]
+server_command = { line = "fishdemo say hello there", level = 2, actor = "Op" }
+[step.expect]
+command_feedback = ["Op says hello there"]
+command_ok = true
+
+[[step]]
+server_command = { line = "fishdemo at 1 ~ ~-2" }
+[step.expect]
+command_feedback = ["at 1 64 -2"]
+
+[[step]]
+server_command = { line = "fishdemo fail" }
+[step.expect]
+command_feedback = ["on purpose"]
+command_ok = false
+
+[[step]]
+server_command = { line = "kill @e" }
+[step.expect]
+command_ok = false
+
+[[step]]
+command = "fishclient"
+[step.expect]
+chat = ["client command ran"]

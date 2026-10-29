@@ -4,3 +4,12 @@
 /docs/*/book
 *.fish
 !examples/**/fixtures/*.fish
+
+# Files the game writes when it is run from the repo root
+/saves/
+/.horizon-cache/
+/horizon-*.txt
+/options.txt
+/logs/
+/crash-reports/
+/screenshots/

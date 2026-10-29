@@ -110,7 +110,9 @@ impl TestHost {
         cfg.dev = self.dev;
         cfg.log_sink = Some(Arc::new(move |r| logs.lock().expect("log lock").push(r)));
         let loader = fish_loader::boot(cfg)?;
-        self.dispatch = Some(LoaderDispatch::new(loader.clone()));
+        let dispatch = LoaderDispatch::new(loader.clone());
+        dispatch.enable_trace();
+        self.dispatch = Some(dispatch);
         self.loader = Some(loader);
         Ok(self)
     }
@@ -159,12 +161,17 @@ impl TestHost {
 
     fn tick_as(&mut self, role: Role, n: u32) {
         for _ in 0..n {
-            {
-                let (mut view, dispatch) = self.view(role);
-                dispatch.tick_start(&mut view);
-                dispatch.tick_end(&mut view);
-            }
-            self.after_tick();
+            let (mut view, dispatch) = self.view(role);
+            dispatch.tick_start(&mut view);
+            dispatch.tick_end(&mut view);
+        }
+        self.drain_trace();
+    }
+
+    /// Moves the events the loader fired since the last call into `sim.events`.
+    pub(crate) fn drain_trace(&mut self) {
+        if let Some(d) = &self.dispatch {
+            self.sim.events.extend(d.take_trace());
         }
     }
 
@@ -179,6 +186,7 @@ impl TestHost {
             dispatch.hud(&mut view, &mut hud);
             texts = hud.texts;
         }
+        self.drain_trace();
         self.sim.frames += u64::from(n);
         if n > 0 {
             self.sim.hud = texts;

@@ -13,6 +13,13 @@ file = "crates/horizon-client/src/game.rs"
 name = "fish_bridge"
 source = "modules/bridge.rs"
 
+[[module]]
+id = "lib"
+file = "crates/horizon-client/src/lib.rs"
+name = "fish_lib"
+source = "modules/lib.rs"
+visibility = "pub"
+
 [[injection]]
 id = "boot"
 target = "horizon_client::spans::enable"
@@ -82,3 +89,303 @@ target = "horizon_client::game::native_hooks::Game<'_>::native_settings_click"
 kind = "HEAD"
 helper = "helpers/settings_click.rs"
 bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "mod_id", ty = "&str", value = "mod_id" }, { name = "button", ty = "usize", value = "button" } ]
+
+[[injection]]
+id = "client-stopping"
+target = "horizon_client::game::Game<'_>::save_for_exit"
+kind = "HEAD"
+helper = "helpers/client_stopping.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" } ]
+
+[[injection]]
+id = "client-stopped"
+target = "horizon_client::discord_presence::stop"
+kind = "HEAD"
+helper = "helpers/client_stopped.rs"
+bindings = [  ]
+
+[[injection]]
+id = "server-starting"
+target = "horizon_client::game::Game<'_>::load_world"
+kind = "HEAD"
+helper = "helpers/server_starting.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "request", ty = "&world_loading::WorldRequest", value = "&request" } ]
+
+[[injection]]
+id = "server-stopping-integrated"
+target = "horizon_client::game::integrated::Game<'_>::stop_integrated"
+kind = "HEAD"
+helper = "helpers/server_stopping_integrated.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" } ]
+
+[[injection]]
+id = "server-stopping-dedicated"
+target = "horizon_client::game::dedicated::Game<'_>::stop_dedicated"
+kind = "HEAD"
+helper = "helpers/server_stopping_dedicated.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" } ]
+
+[[injection]]
+id = "server-stopped"
+target = "horizon_client::game::lan::Game<'_>::lan_close"
+kind = "HEAD"
+helper = "helpers/server_stopped.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" } ]
+
+[[injection]]
+id = "world-load"
+target = "horizon_client::game::levels::Game<'_>::open_level"
+kind = "HEAD"
+helper = "helpers/world_load.rs"
+bindings = [ { name = "game", ty = "&Game<'_>", value = "&*self" }, { name = "dim", ty = "Dim", value = "dim" } ]
+
+[[injection]]
+id = "chunk-insert"
+target = "horizon_client::chunk_map::ChunkMap::insert"
+kind = "HEAD"
+helper = "helpers/chunk_insert.rs"
+bindings = [ { name = "map", ty = "&ChunkMap", value = "&*self" }, { name = "key", ty = "(i32, i32)", value = "key" } ]
+
+[[injection]]
+id = "chunk-remove"
+target = "horizon_client::chunk_map::ChunkMap::remove"
+kind = "HEAD"
+helper = "helpers/chunk_remove.rs"
+bindings = [ { name = "map", ty = "&ChunkMap", value = "&*self" }, { name = "key", ty = "&(i32, i32)", value = "key" } ]
+
+[[injection]]
+id = "reload-start"
+target = "horizon_client::game::functions::Game<'_>::reload_datapacks"
+kind = "HEAD"
+helper = "helpers/reload_start.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "run_load", ty = "bool", value = "run_load" } ]
+
+[[injection]]
+id = "use-item"
+target = "horizon_client::game::Game<'_>::use_item"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/use_item.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" } ]
+
+[[injection]]
+id = "attack-block"
+target = "horizon_client::game::Game<'_>::attack_block"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/attack_block.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "pos", ty = "[i32; 3]", value = "pos" } ]
+
+[[injection]]
+id = "attack"
+target = "horizon_client::game::Game<'_>::attack"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/attack.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" } ]
+
+[[injection]]
+id = "break-block"
+target = "horizon_client::game::Game<'_>::break_block_as_player"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/break_block.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "pos", ty = "[i32; 3]", value = "pos" } ]
+
+[[injection]]
+id = "remote-use-block"
+target = "horizon_client::game::remote::Game<'_>::remote_use_item_on"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/remote_use_block.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "hand", ty = "Hand", value = "hand" } ]
+
+[[injection]]
+id = "remote-use-item"
+target = "horizon_client::game::remote::Game<'_>::remote_use_item"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/remote_use_item.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "hand", ty = "Hand", value = "hand" } ]
+
+[[injection]]
+id = "remote-use-entity"
+target = "horizon_client::game::remote::Game<'_>::remote_use_entity"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/remote_use_entity.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "hand", ty = "Hand", value = "hand" } ]
+
+[[injection]]
+id = "remote-attack-entity"
+target = "horizon_client::game::remote::Game<'_>::remote_start_attack"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/remote_attack_entity.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" } ]
+
+[[injection]]
+id = "remote-attack-block"
+target = "horizon_client::game::remote::Game<'_>::remote_mining"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/remote_attack_block.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "start", ty = "bool", value = "start" } ]
+
+[[injection]]
+id = "pick-item"
+target = "horizon_client::pick_item::pick"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/pick_item.rs"
+bindings = [ { name = "stack", ty = "&ItemStack", value = "stack" } ]
+
+[[injection]]
+id = "mob-damage"
+target = "horizon_client::mobs::ai::accepts_damage"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/mob_damage.rs"
+bindings = [ { name = "m", ty = "&Mob", value = "&*m" }, { name = "source", ty = "&Damage", value = "source" }, { name = "amount", ty = "f32", value = "_amount" } ]
+
+[[injection]]
+id = "player-damage"
+target = "horizon_client::health::PlayerMotion::hurt_caused_by"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/player_damage.rs"
+bindings = [ { name = "motion", ty = "&PlayerMotion", value = "&*self" }, { name = "resources", ty = "&HealthResources", value = "resources" }, { name = "source", ty = "DamageTypeId", value = "source" }, { name = "amount", ty = "f32", value = "amount" } ]
+
+[[injection]]
+id = "player-damage-actor"
+target = "horizon_client::game::creatures::Game<'_>::hurt_player_from"
+kind = "HEAD"
+helper = "helpers/player_damage_actor.rs"
+bindings = [ { name = "game", ty = "&Game<'_>", value = "&*self" } ]
+
+[[injection]]
+id = "mob-died"
+target = "horizon_client::game::creatures::Game<'_>::mob_died"
+kind = "HEAD"
+helper = "helpers/mob_died.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "m", ty = "&Mob", value = "m" } ]
+
+[[injection]]
+id = "guest-edges"
+target = "horizon_client::game::lan_actions::Game<'_>::tick_guests"
+kind = "HEAD"
+helper = "helpers/guest_edges.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "host", ty = "&LanHost", value = "&*host" } ]
+
+[[injection]]
+id = "player-join"
+target = "horizon_client::game::lan::Game<'_>::load_guest_records"
+kind = "HEAD"
+helper = "helpers/player_join.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "host", ty = "&LanHost", value = "&*host" }, { name = "conn", ty = "u32", value = "conn" } ]
+
+[[injection]]
+id = "player-leave"
+target = "horizon_client::game::lan_crafting::Game<'_>::lan_crafting_left"
+kind = "HEAD"
+helper = "helpers/player_leave.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "g", ty = "&Guest", value = "&*g" } ]
+
+[[injection]]
+id = "local-respawn"
+target = "horizon_client::game::screens::Game<'_>::respawn_player"
+kind = "HEAD"
+helper = "helpers/local_respawn.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" } ]
+
+[[injection]]
+id = "allow-sleeping"
+target = "horizon_client::game::Game<'_>::try_sleep"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/allow_sleeping.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "pos", ty = "[i32; 3]", value = "pos" } ]
+
+[[injection]]
+id = "local-wake"
+target = "horizon_client::game::Game<'_>::wake_up"
+kind = "HEAD"
+helper = "helpers/local_wake.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" } ]
+
+[[injection]]
+id = "chat-receive"
+target = "horizon_client::game::remote::Game<'_>::chat_line"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/chat_receive.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "content", ty = "&horizon_client::text::Text", value = "&content" }, { name = "source", ty = "horizon_client::chat::ChatSource", value = "source" } ]
+
+[[injection]]
+id = "chat-receive-local"
+target = "horizon_client::game::chat::Game<'_>::local_chat_line"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/chat_receive_local.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "content", ty = "&horizon_client::text::Text", value = "&text" }, { name = "source", ty = "horizon_client::chat::ChatSource", value = "source" } ]
+
+[[injection]]
+id = "chat-send"
+target = "horizon_client::game::chat::Game<'_>::handle_chat_input"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/chat_send.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "message", ty = "&str", value = "message" } ]
+
+[[injection]]
+id = "chat-sent"
+target = "horizon_client::game::remote::Game<'_>::send_chat"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/chat_sent.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "message", ty = "&str", value = "message" } ]
+
+[[injection]]
+id = "chat-gate"
+target = "horizon_client::lan::hub::chat::Hub::try_handle_chat"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/chat_gate.rs"
+bindings = [ { name = "hub", ty = "&Hub", value = "&*self" }, { name = "i", ty = "usize", value = "i" }, { name = "message", ty = "&str", value = "message" }, { name = "command", ty = "bool", value = "command" } ]
+
+[[injection]]
+id = "chat-broadcast"
+target = "horizon_client::lan::hub::chat::Hub::broadcast_chat"
+kind = "HEAD"
+helper = "helpers/chat_broadcast.rs"
+bindings = [ { name = "hub", ty = "&Hub", value = "&*self" }, { name = "message", ty = "&ChatMessage", value = "message" } ]
+
+[[injection]]
+id = "system-message"
+target = "horizon_client::lan::hub::Hub::system_message"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/system_message.rs"
+bindings = [ { name = "content", ty = "&Tag", value = "&content" } ]
+
+[[injection]]
+id = "run-command"
+target = "horizon_client::game::commands::Game<'_>::run_command"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/run_command.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "command", ty = "&str", value = "command" } ]
+
+[[injection]]
+id = "guest-command"
+target = "horizon_client::game::lan_actions::Game<'_>::guest_command"
+kind = "HEAD"
+helper = "helpers/guest_command.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "host", ty = "&LanHost", value = "&*host" }, { name = "conn", ty = "u32", value = "conn" }, { name = "command", ty = "&str", value = "command" } ]
+
+[[injection]]
+id = "debug-lines"
+target = "horizon_client::debug_overlay::Displayer::columns"
+kind = "RETURN"
+helper = "helpers/debug_lines.rs"
+bindings = [ { name = "columns", ty = "(Vec<String>, Vec<String>)", value = "$value" } ]

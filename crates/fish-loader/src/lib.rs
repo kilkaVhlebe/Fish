@@ -14,6 +14,8 @@
 mod boot;
 mod bus;
 mod client_services;
+mod command_services;
+mod commands;
 mod discovery;
 mod dispatch;
 pub mod edition;
