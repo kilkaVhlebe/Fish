@@ -89,7 +89,7 @@ file and in the Russian copy at the same time.
 - [ ] **P8.4** Items
 - [ ] **P8.5** `item_group`
 - [ ] **P8.6** `content` registries
-- [ ] **P8.7** `tag` and convention tags
+- [x] **P8.7** `tag` and convention tags
 - [ ] **P8.8** Sound events
 - [ ] **P8.9** Particle types
 - [ ] **P8.10** `game_rule`

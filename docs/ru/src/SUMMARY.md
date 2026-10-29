@@ -22,5 +22,6 @@
   - [F3, падения, остановленные моды](modders/debug.md)
   - [Сеть](modders/networking.md)
   - [Реестры](modders/registry.md)
+  - [Теги](modders/tags.md)
 - [Инструменты](modders/tooling.md)
 - [Тестирование](modders/testing.md)

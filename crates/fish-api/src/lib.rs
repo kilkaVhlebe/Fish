@@ -19,6 +19,7 @@ pub mod game;
 pub mod loader;
 pub mod networking;
 pub mod registry;
+pub mod tag;
 
 mod error;
 mod host;
