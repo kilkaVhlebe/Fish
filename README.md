@@ -10,7 +10,7 @@ Minecraft: Java Edition rewritten in Rust.
 
 > Fish is not affiliated with Horizon, Mojang or Microsoft.
 
-**Status:** early development. See the [roadmap](docs/en/src/roadmap.md).
+**Status:** early development. See the [roadmap](ROADMAP.md).
 Russian version of this file: [README.ru.md](README.ru.md).
 
 ## Documentation

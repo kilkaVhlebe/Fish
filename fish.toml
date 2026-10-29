@@ -14,7 +14,7 @@ git = "https://github.com/horizon-rust/horizon-mixins"
 rev = "0d6b103c70633d8fd9443d8d0acd3aadaacedb06"
 
 [release]
-github = ""                             # "owner/repo"; empty until decided
+github = "kilkaVhlebe/Fish"                             # "owner/repo"; empty until decided
 
 [coverage]                              # minimum line coverage % per crate (cargo llvm-cov)
 fish-metadata = 95
