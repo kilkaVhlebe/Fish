@@ -13,15 +13,15 @@ file and in the Russian copy at the same time.
 
 ## P1 — Metadata and dependency resolution
 
-- [ ] **P1.1** Manifest model and parser (`fish.mod.toml`)
-- [ ] **P1.2** Version requirement sets and builtin candidates
-- [ ] **P1.3** Dependency resolver
-- [ ] **P1.4** Tests (unit + property) with at least 95% coverage
-- [ ] **P1.5** Manifest reference docs
+- [x] **P1.1** Manifest model and parser (`fish.mod.toml`)
+- [x] **P1.2** Version requirement sets and builtin candidates
+- [x] **P1.3** Dependency resolver
+- [x] **P1.4** Tests (unit + property) with at least 95% coverage
+- [x] **P1.5** Manifest reference docs
 
 ## P2 — ABI, API core, loader runtime, test host
 
-- [ ] **P2.1** `fish-abi`: stable C ABI types
+- [x] **P2.1** `fish-abi`: stable C ABI types
 - [ ] **P2.2** `fish-pack`: `.fish` archives
 - [ ] **P2.3** `fish-api` core: identifiers, events, loader API, `export_mod!`
 - [ ] **P2.4** `fish-loader` core: discovery, loading, event bus, services

@@ -1,0 +1,18 @@
+[package]
+name = "fish-metadata"
+description = "Fish mod manifest model, parser and dependency resolver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+semver = { version = "1.0.28", features = ["serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.8"
+
+[dev-dependencies]
+proptest = "1.12.0"
