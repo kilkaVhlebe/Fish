@@ -18,6 +18,7 @@ pub mod event;
 pub mod game;
 pub mod loader;
 pub mod networking;
+pub mod registry;
 
 mod error;
 mod host;

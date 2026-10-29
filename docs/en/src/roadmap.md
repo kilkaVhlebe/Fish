@@ -83,7 +83,7 @@ file and in the Russian copy at the same time.
 
 ## P8 — Content I: registries, blocks, items, tags, sounds, game rules
 
-- [ ] **P8.1** `registry`
+- [x] **P8.1** `registry`
 - [ ] **P8.2** Blocks
 - [ ] **P8.3** Custom state properties
 - [ ] **P8.4** Items

@@ -25,6 +25,7 @@ mod inner;
 mod load;
 mod net;
 mod net_services;
+mod registry_services;
 mod report;
 pub mod selftest;
 

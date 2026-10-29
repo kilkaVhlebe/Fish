@@ -248,6 +248,10 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             std::ptr::from_ref(&crate::net_services::NETWORKING) as usize,
         ),
         (
+            fish_abi::registry::SERVICE_REGISTRY,
+            std::ptr::from_ref(&crate::registry_services::REGISTRY) as usize,
+        ),
+        (
             fish_abi::commands::SERVICE_COMMANDS,
             std::ptr::from_ref(&crate::command_services::COMMANDS) as usize,
         ),
@@ -377,6 +381,10 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             *state = ModState::Ok;
         }
     }
+    inner
+        .net
+        .frozen
+        .store(true, std::sync::atomic::Ordering::Release);
     for (id, kind) in [
         (
             fish_abi::commands::ids::REGISTER,

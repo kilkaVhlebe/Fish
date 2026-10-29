@@ -21,5 +21,6 @@
   - [Команды](modders/commands.md)
   - [F3, падения, остановленные моды](modders/debug.md)
   - [Сеть](modders/networking.md)
+  - [Реестры](modders/registry.md)
 - [Инструменты](modders/tooling.md)
 - [Тестирование](modders/testing.md)

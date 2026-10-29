@@ -1,0 +1,12 @@
+schema = 1
+id = "registry_demo"
+version = "0.1.0"
+name = "Registry Demo"
+description = "Fish example mod: registries"
+license = "MIT"
+
+[library]
+name = "registry_demo"
+
+[entrypoints]
+main = ["init"]

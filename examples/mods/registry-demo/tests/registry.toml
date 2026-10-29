@@ -1,0 +1,11 @@
+name = "registries freeze after the entrypoints"
+
+[[step]]
+ticks = 1
+[step.expect]
+logs = ["registered ruby=0 again=0 opal=1 frozen=false"]
+
+[[step]]
+game = true
+[step.expect]
+logs = ["late registration refused: invalid argument: registries are frozen", "raw ids: ruby=Ok(Some(0)) late=Ok(None) frozen=Ok(true)"]

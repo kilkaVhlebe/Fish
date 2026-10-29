@@ -21,5 +21,6 @@
   - [Commands](modders/commands.md)
   - [F3, crashes, stopped mods](modders/debug.md)
   - [Networking](modders/networking.md)
+  - [Registries](modders/registry.md)
 - [Tooling](modders/tooling.md)
 - [Testing](modders/testing.md)

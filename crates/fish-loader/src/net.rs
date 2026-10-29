@@ -284,6 +284,8 @@ pub(crate) struct Net {
     peers: Mutex<HashMap<String, Peer>>,
     out: RwLock<Option<Arc<dyn NetOut>>>,
     pub(crate) registries: Mutex<RegistryTables>,
+    /// Registration closed (entrypoints are over).
+    pub(crate) frozen: std::sync::atomic::AtomicBool,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
