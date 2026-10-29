@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "abi_mismatch"
+version = "0.1.0"
+dependencies = [
+ "fish-abi",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -87,6 +94,34 @@ name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
+
+[[package]]
+name = "bad_entry"
+version = "0.1.0"
+dependencies = [
+ "fish-abi",
+]
+
+[[package]]
+name = "bad_list"
+version = "0.1.0"
+dependencies = [
+ "fish-abi",
+]
+
+[[package]]
+name = "bad_null"
+version = "0.1.0"
+dependencies = [
+ "fish-abi",
+]
+
+[[package]]
+name = "bad_size"
+version = "0.1.0"
+dependencies = [
+ "fish-abi",
+]
 
 [[package]]
 name = "bit-set"
@@ -277,6 +312,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "dep_a"
+version = "0.1.0"
+dependencies = [
+ "fish-api",
+ "log",
+]
+
+[[package]]
+name = "dep_b"
+version = "0.1.0"
+dependencies = [
+ "fish-api",
+ "log",
+]
+
+[[package]]
 name = "derive_arbitrary"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -332,6 +383,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "fish-loader"
+version = "0.1.0"
+dependencies = [
+ "fish-abi",
+ "fish-api",
+ "fish-metadata",
+ "fish-pack",
+ "fish-test-host",
+ "libloading",
+ "log",
+ "semver",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "zip",
+]
+
+[[package]]
 name = "fish-metadata"
 version = "0.1.0"
 dependencies = [
@@ -349,6 +418,17 @@ dependencies = [
  "sha2",
  "tempfile",
  "zip",
+]
+
+[[package]]
+name = "fish-test-host"
+version = "0.1.0"
+dependencies = [
+ "fish-api",
+ "fish-loader",
+ "fish-pack",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -402,6 +482,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "hello"
+version = "0.1.0"
+dependencies = [
+ "fish-api",
+ "log",
+]
+
+[[package]]
 name = "indexmap"
 version = "2.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -418,10 +506,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
+name = "itoa"
+version = "1.0.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "kinds"
+version = "0.1.0"
+dependencies = [
+ "fish-api",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
+
+[[package]]
+name = "libloading"
+version = "0.8.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
+dependencies = [
+ "cfg-if",
+ "windows-link",
+]
 
 [[package]]
 name = "linux-raw-sys"
@@ -452,6 +563,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "nosymbol"
+version = "0.1.0"
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -471,6 +586,30 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
+
+[[package]]
+name = "ordering"
+version = "0.1.0"
+dependencies = [
+ "fish-api",
+ "log",
+]
+
+[[package]]
+name = "panicky"
+version = "0.1.0"
+dependencies = [
+ "fish-api",
+ "log",
+]
+
+[[package]]
+name = "probe"
+version = "0.1.0"
+dependencies = [
+ "fish-api",
+ "log",
+]
 
 [[package]]
 name = "proc-macro-crate"
@@ -660,6 +799,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_json"
+version = "1.0.154"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7e9cc8b1b85264074fbcc02a88680c4096b1e47df8f739dceb03bf482f04bd6"
+dependencies = [
+ "itoa",
+ "memchr",
+ "serde",
+ "serde_core",
+ "zmij",
+]
+
+[[package]]
 name = "serde_spanned"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -677,6 +829,22 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
  "digest",
+]
+
+[[package]]
+name = "share_a"
+version = "0.1.0"
+dependencies = [
+ "fish-api",
+ "log",
+]
+
+[[package]]
+name = "share_b"
+version = "0.1.0"
+dependencies = [
+ "fish-api",
+ "log",
 ]
 
 [[package]]
@@ -873,6 +1041,12 @@ dependencies = [
  "memchr",
  "zopfli",
 ]
+
+[[package]]
+name = "zmij"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zopfli"

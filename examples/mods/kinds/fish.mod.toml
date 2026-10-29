@@ -1,0 +1,12 @@
+schema = 1
+id = "kinds"
+version = "0.1.0"
+name = "Kinds"
+description = "Fish example mod: exports entrypoints under keys of the 'wrong' kind"
+license = "MIT"
+
+[library]
+name = "kinds"
+
+[entrypoints]
+main = []

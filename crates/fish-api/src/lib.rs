@@ -32,6 +32,12 @@ pub use macros::{__object, __run_init};
 /// ABI version this crate was built for.
 pub const ABI_VERSION: (u16, u16) = (abi::FISH_ABI_MAJOR, abi::FISH_ABI_MINOR);
 
+/// The attached host table, for diagnostic mods that exercise the raw ABI (null if none).
+#[doc(hidden)]
+pub fn __host_table() -> *const abi::FishHostV1 {
+    host::get().map_or(std::ptr::null(), std::ptr::from_ref)
+}
+
 /// Attaches `host` for tests that drive the API without a loader.
 #[doc(hidden)]
 pub fn __attach_for_tests(host: *const abi::FishHostV1) {

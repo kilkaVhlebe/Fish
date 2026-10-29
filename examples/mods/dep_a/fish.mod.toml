@@ -1,0 +1,17 @@
+schema = 1
+id = "dep_a"
+version = "0.1.0"
+name = "Dep A"
+description = "Fish example mod: Dep A"
+license = "MIT"
+
+
+[library]
+name = "dep_a"
+
+[entrypoints]
+main = ["init"]
+
+[depends]
+dep_b = ">=1"
+fish = ">=0.1.0"

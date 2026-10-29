@@ -1,0 +1,12 @@
+schema = 1
+id = "nosymbol"
+version = "0.1.0"
+name = "No symbol"
+description = "Fish example mod: No symbol"
+license = "MIT"
+
+[library]
+name = "nosymbol"
+
+[entrypoints]
+main = []

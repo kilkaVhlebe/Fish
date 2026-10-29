@@ -24,11 +24,11 @@ file and in the Russian copy at the same time.
 - [x] **P2.1** `fish-abi`: stable C ABI types
 - [x] **P2.2** `fish-pack`: `.fish` archives
 - [x] **P2.3** `fish-api` core: identifiers, events, loader API, `export_mod!`
-- [ ] **P2.4** `fish-loader` core: discovery, loading, event bus, services
-- [ ] **P2.5** `fish-test-host`
-- [ ] **P2.6** Example mods
-- [ ] **P2.7** Loader integration tests
-- [ ] **P2.8** ABI, getting-started and events docs
+- [x] **P2.4** `fish-loader` core: discovery, loading, event bus, services
+- [x] **P2.5** `fish-test-host`
+- [x] **P2.6** Example mods
+- [x] **P2.7** Loader integration tests
+- [x] **P2.8** ABI, getting-started and events docs
 
 ## P3 — Dev tooling (`cargo-fish`)
 

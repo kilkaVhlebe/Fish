@@ -1,0 +1,15 @@
+schema = 1
+id = "share_b"
+version = "0.1.0"
+name = "Share B"
+description = "Fish example mod: Share B"
+license = "MIT"
+
+[library]
+name = "share_b"
+
+[entrypoints]
+main = ["init"]
+
+[depends]
+share_a = "*"

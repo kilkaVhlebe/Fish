@@ -1,0 +1,12 @@
+schema = 1
+id = "bad_null"
+version = "0.1.0"
+name = "bad_null"
+description = "Fish example mod: returns a null export table"
+license = "MIT"
+
+[library]
+name = "bad_null"
+
+[entrypoints]
+main = []

@@ -1,0 +1,26 @@
+//! The Fish host runtime.
+//!
+//! [`boot`] discovers mods (`<game dir>/fish-mods` plus development mods), resolves their
+//! dependencies with `fish-metadata`, extracts and loads their native libraries, validates the
+//! ABI, and runs the entrypoints (`pre_launch`, then `main`, then `client` or `server`). It never
+//! panics the game for a bad mod: failures are logged, reported in the [`BootReport`], and the mod
+//! (plus its dependents) stops receiving events.
+//!
+//! Every [`Loader`] is independent: libraries are extracted into the loader's own
+//! `<game dir>/.fish/cache`, so distinct file paths give each loader its own module instances.
+
+#![deny(missing_docs)]
+
+mod boot;
+mod bus;
+mod discovery;
+mod host;
+mod inner;
+mod load;
+mod report;
+
+pub use boot::{BootConfig, BootError, Loader, ModSummary, boot};
+pub use bus::{DEFAULT_PHASE, EventBus, EventIndex};
+pub use fish_metadata::Side;
+pub use inner::{LogRecord, LogSink, ModState};
+pub use report::{AbiReport, BootReport, ModReport};

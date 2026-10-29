@@ -571,7 +571,7 @@ pub fn write(spec: PackSpec, out: &Path) -> Result<(), PackError> {
     write_with_limits(spec, out, Limits::default())
 }
 
-/// Like [`write`], with explicit limits.
+/// Like [`write()`], with explicit limits.
 pub fn write_with_limits(spec: PackSpec, out: &Path, limits: Limits) -> Result<(), PackError> {
     let manifest = fish_metadata::parse(&spec.manifest)?;
     let has_bin = spec.files.keys().any(|n| n.starts_with("bin/"));

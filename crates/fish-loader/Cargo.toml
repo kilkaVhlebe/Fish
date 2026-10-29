@@ -1,0 +1,26 @@
+[package]
+name = "fish-loader"
+description = "Fish host runtime: mod discovery, loading, event bus and services"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fish-abi = { path = "../fish-abi" }
+fish-metadata = { path = "../fish-metadata" }
+fish-pack = { path = "../fish-pack" }
+libloading = "0.8"
+log = "0.4"
+semver = "1.0.28"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+fish-api = { path = "../fish-api" }
+fish-test-host = { path = "../fish-test-host" }
+tempfile = "3.27.0"
+zip = { version = "2", default-features = false, features = ["deflate"] }

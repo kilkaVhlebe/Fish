@@ -1,0 +1,12 @@
+schema = 1
+id = "bad_size"
+version = "0.1.0"
+name = "bad_size"
+description = "Fish example mod: reports a table smaller than FishModV1"
+license = "MIT"
+
+[library]
+name = "bad_size"
+
+[entrypoints]
+main = []

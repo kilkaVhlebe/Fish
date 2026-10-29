@@ -1,0 +1,12 @@
+schema = 1
+id = "abi_mismatch"
+version = "0.1.0"
+name = "ABI mismatch"
+description = "Fish example mod: ABI mismatch"
+license = "MIT"
+
+[library]
+name = "abi_mismatch"
+
+[entrypoints]
+main = []

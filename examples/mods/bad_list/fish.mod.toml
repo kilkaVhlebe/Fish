@@ -1,0 +1,12 @@
+schema = 1
+id = "bad_list"
+version = "0.1.0"
+name = "bad_list"
+description = "Fish example mod: claims entrypoints but gives a null list"
+license = "MIT"
+
+[library]
+name = "bad_list"
+
+[entrypoints]
+main = []

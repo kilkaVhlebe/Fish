@@ -1,0 +1,14 @@
+schema = 1
+id = "dep_b"
+version = "1.2.0"
+name = "Dep B"
+description = "Fish example mod: Dep B"
+license = "MIT"
+
+[library]
+name = "dep_b"
+
+[entrypoints]
+pre_launch = ["early"]
+main = ["init"]
+"fish:dep_b_api" = ["api"]

@@ -1,0 +1,12 @@
+schema = 1
+id = "panicky"
+version = "0.1.0"
+name = "Panicky"
+description = "Fish example mod: Panicky"
+license = "MIT"
+
+[library]
+name = "panicky"
+
+[entrypoints]
+main = ["init"]

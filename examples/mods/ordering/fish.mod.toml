@@ -1,0 +1,13 @@
+schema = 1
+id = "ordering"
+version = "0.1.0"
+name = "Ordering"
+description = "Fish example mod: event phases and first-non-pass dispatch"
+license = "MIT"
+
+[library]
+name = "ordering"
+
+[entrypoints]
+pre_launch = ["early"]
+main = ["init"]

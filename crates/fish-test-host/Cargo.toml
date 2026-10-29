@@ -1,0 +1,17 @@
+[package]
+name = "fish-test-host"
+description = "In-process Fish host for tests and `cargo fish test`"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fish-api = { path = "../fish-api" }
+fish-loader = { path = "../fish-loader" }
+fish-pack = { path = "../fish-pack" }
+serde_json = "1"
+tempfile = "3.27.0"

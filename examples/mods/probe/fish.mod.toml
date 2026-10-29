@@ -1,0 +1,13 @@
+schema = 1
+id = "probe"
+version = "0.1.0"
+name = "Probe"
+description = "Fish example mod: pokes every host callback with valid and invalid arguments"
+license = "MIT"
+
+[library]
+name = "probe"
+
+[entrypoints]
+main = ["init"]
+"probe:obj" = ["api"]

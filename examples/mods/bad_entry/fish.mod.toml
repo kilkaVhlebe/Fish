@@ -1,0 +1,12 @@
+schema = 1
+id = "bad_entry"
+version = "0.1.0"
+name = "bad_entry"
+description = "Fish example mod: exports an entrypoint whose kind does not match its function pointers"
+license = "MIT"
+
+[library]
+name = "bad_entry"
+
+[entrypoints]
+main = []
