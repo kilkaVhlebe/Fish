@@ -1,0 +1,18 @@
+# Edits applied to the staged Horizon workspace by `cargo xtask edition stage`.
+members = [
+    "fish/crates/fish-abi",
+    "fish/crates/fish-metadata",
+    "fish/crates/fish-pack",
+    "fish/crates/fish-hooks",
+    "fish/crates/fish-loader",
+]
+
+[[dependency]]
+crate = "crates/horizon-client"
+name = "fish-loader"
+path = "../../fish/crates/fish-loader"
+
+[[dependency]]
+crate = "crates/horizon-client"
+name = "fish-hooks"
+path = "../../fish/crates/fish-hooks"

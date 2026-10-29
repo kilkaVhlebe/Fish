@@ -1,0 +1,13 @@
+[package]
+name = "fish-test-tools"
+description = "Small programs the Fish tests run: a fake game and a fake Horizon launcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json = "1"

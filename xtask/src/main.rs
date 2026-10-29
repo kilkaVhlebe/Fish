@@ -2,11 +2,13 @@
 
 mod config;
 mod docs;
+mod edition;
+mod horizon;
 mod lcov;
 mod roadmap;
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
@@ -30,6 +32,73 @@ enum Cmd {
     CheckConfig,
     /// Tick roadmap items (e.g. `P0.1 P0.2`) in both languages.
     Tick { ids: Vec<String> },
+    /// Fetch Horizon's source.
+    #[command(subcommand)]
+    Horizon(HorizonCmd),
+    /// Manage horizon-mixins.
+    #[command(subcommand)]
+    Mixins(MixinsCmd),
+    /// Build the Fish Edition of Horizon.
+    #[command(subcommand)]
+    Edition(EditionCmd),
+    /// Local in-game end to end test of the built edition (needs prepared game resources).
+    E2e {
+        /// Prepared resources folder (`.local/horizon-client/26.3` of a launcher version).
+        #[arg(long)]
+        resources: PathBuf,
+        /// Path of horizon-ctl.
+        #[arg(long)]
+        horizon_ctl: PathBuf,
+        /// Profile that was built.
+        #[arg(long, value_enum, default_value = "release")]
+        profile: edition::Profile,
+    },
+}
+
+#[derive(Subcommand)]
+enum HorizonCmd {
+    /// Download the pinned commit into .horizon/source/<commit>/.
+    Fetch,
+}
+
+#[derive(Subcommand)]
+enum MixinsCmd {
+    /// Install horizon-mixins at the pinned revision.
+    Install,
+}
+
+#[derive(Subcommand)]
+enum EditionCmd {
+    /// Copy the source and the edition crates into .horizon/work/<commit>/src.
+    Stage,
+    /// Assemble the bundle and apply it with horizon-mixins.
+    Mixins,
+    /// Compile the edition binary.
+    Build {
+        /// Cargo profile.
+        #[arg(long, value_enum, default_value = "release")]
+        profile: edition::Profile,
+    },
+    /// Zip the binary into dist/.
+    Package {
+        /// Profile that was built.
+        #[arg(long, value_enum, default_value = "release")]
+        profile: edition::Profile,
+    },
+    /// Run the built edition's self test with the hello mod.
+    Selftest {
+        /// Profile that was built.
+        #[arg(long, value_enum, default_value = "release")]
+        profile: edition::Profile,
+    },
+    /// Run Horizon's own tests on pristine and staged source; fail only on regressions.
+    Regressions,
+    /// fetch, install mixins, stage, apply, build, package, self test.
+    All {
+        /// Cargo profile.
+        #[arg(long, value_enum, default_value = "release")]
+        profile: edition::Profile,
+    },
 }
 
 fn root() -> PathBuf {
@@ -44,6 +113,21 @@ fn run(root: &Path, program: &str, args: &[&str]) -> Result<()> {
     let status = Command::new(program)
         .args(args)
         .current_dir(root)
+        .status()
+        .with_context(|| format!("spawning {program}"))?;
+    if !status.success() {
+        bail!("`{program} {}` failed with {status}", args.join(" "));
+    }
+    Ok(())
+}
+
+/// Like [`run`], but the child's stdout is discarded.
+fn run_silent(root: &Path, program: &str, args: &[&str]) -> Result<()> {
+    eprintln!("$ {program} {}", args.join(" "));
+    let status = Command::new(program)
+        .args(args)
+        .current_dir(root)
+        .stdout(Stdio::null())
         .status()
         .with_context(|| format!("spawning {program}"))?;
     if !status.success() {
@@ -128,6 +212,37 @@ fn tick(root: &Path, ids: &[String]) -> Result<()> {
     Ok(())
 }
 
+fn load_config(root: &Path) -> Result<config::FishConfig> {
+    config::parse(&std::fs::read_to_string(root.join("fish.toml")).context("reading fish.toml")?)
+}
+
+fn edition_cmd(root: &Path, cmd: EditionCmd) -> Result<()> {
+    let cfg = load_config(root)?;
+    match cmd {
+        EditionCmd::Stage => horizon::stage(root, &cfg).map(|_| ()),
+        EditionCmd::Mixins => edition::apply_mixins(root, &cfg).map(|_| ()),
+        EditionCmd::Regressions => edition::run_regressions(root, &cfg),
+        EditionCmd::Build { profile } => edition::build(root, &cfg, profile).map(|_| ()),
+        EditionCmd::Package { profile } => edition::package(root, &cfg, profile).map(|_| ()),
+        EditionCmd::Selftest { profile } => {
+            let report = edition::selftest(root, &cfg, profile)?;
+            eprintln!("self test passed: {}", report["checks"]);
+            Ok(())
+        }
+        EditionCmd::All { profile } => {
+            horizon::fetch(root, &cfg)?;
+            horizon::mixins_install(root, &cfg)?;
+            horizon::stage(root, &cfg)?;
+            edition::apply_mixins(root, &cfg)?;
+            edition::build(root, &cfg, profile)?;
+            edition::package(root, &cfg, profile)?;
+            let report = edition::selftest(root, &cfg, profile)?;
+            eprintln!("self test passed: {}", report["checks"]);
+            Ok(())
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let root = root();
     match Cli::parse().cmd {
@@ -136,5 +251,21 @@ fn main() -> Result<()> {
         Cmd::Coverage => coverage(&root),
         Cmd::CheckConfig => check_config(&root),
         Cmd::Tick { ids } => tick(&root, &ids),
+        Cmd::Horizon(HorizonCmd::Fetch) => horizon::fetch(&root, &load_config(&root)?).map(|_| ()),
+        Cmd::Mixins(MixinsCmd::Install) => {
+            horizon::mixins_install(&root, &load_config(&root)?).map(|_| ())
+        }
+        Cmd::Edition(cmd) => edition_cmd(&root, cmd),
+        Cmd::E2e {
+            resources,
+            horizon_ctl,
+            profile,
+        } => edition::e2e(
+            &root,
+            &load_config(&root)?,
+            profile,
+            &resources,
+            &horizon_ctl,
+        ),
     }
 }

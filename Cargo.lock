@@ -434,6 +434,19 @@ name = "fish-hooks"
 version = "0.1.0"
 
 [[package]]
+name = "fish-launch"
+version = "0.1.0"
+dependencies = [
+ "fish-test-host",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "fish-loader"
 version = "0.1.0"
 dependencies = [
@@ -484,6 +497,13 @@ dependencies = [
  "serde_json",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "fish-test-tools"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]

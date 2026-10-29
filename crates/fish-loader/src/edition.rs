@@ -1,6 +1,7 @@
 //! What the edition's bridge calls at process start.
 
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use crate::dispatch::{LoaderDispatch, install_global};
 use crate::{BootConfig, Loader, Side, boot, selftest};
@@ -23,29 +24,35 @@ pub fn side_and_home(
     }
 }
 
-/// Boots Fish for the edition: environment configuration, global install, optional self test.
+static BOOTED: OnceLock<Option<&'static Loader>> = OnceLock::new();
+
+/// Boots Fish for the edition, once per process: environment configuration, global install,
+/// optional self test.
 ///
-/// `args` are the process arguments without the program name. With `FISH_LOADER_SELFTEST` set the
-/// self test runs and the process exits before the game starts.
+/// Called by the bridge at the start of the game's `run`, once Horizon's logging is up. `args`
+/// are the process arguments without the program name. With `FISH_LOADER_SELFTEST` set the self
+/// test runs and the process exits before the game starts.
 pub fn boot_for_edition(
     args: &[String],
     game_home: impl FnOnce() -> PathBuf,
 ) -> Option<&'static Loader> {
-    let (side, home) = side_and_home(args, game_home)?;
-    let loader = match boot(BootConfig::from_env(side, home)) {
-        Ok(l) => l,
-        Err(e) => {
-            log::error!("Fish could not start: {e}");
-            return None;
+    *BOOTED.get_or_init(|| {
+        let (side, home) = side_and_home(args, game_home)?;
+        let loader = match boot(BootConfig::from_env(side, home)) {
+            Ok(l) => l,
+            Err(e) => {
+                log::error!("Fish could not start: {e}");
+                return None;
+            }
+        };
+        let loader = install_global(loader);
+        if let Some(path) = std::env::var_os("FISH_LOADER_SELFTEST") {
+            let dispatch = LoaderDispatch::new(loader.clone());
+            let code = selftest::run_and_write(std::path::Path::new(&path), loader, &dispatch);
+            std::process::exit(code);
         }
-    };
-    let loader = install_global(loader);
-    if let Some(path) = std::env::var_os("FISH_LOADER_SELFTEST") {
-        let dispatch = LoaderDispatch::new(loader.clone());
-        let code = selftest::run_and_write(std::path::Path::new(&path), loader, &dispatch);
-        std::process::exit(code);
-    }
-    Some(loader)
+        Some(loader)
+    })
 }
 
 #[cfg(test)]
@@ -79,6 +86,16 @@ mod tests {
                 .unwrap()
                 .0,
             Side::Server
+        );
+    }
+
+    #[test]
+    fn help_boots_nothing_and_is_remembered() {
+        // Runs in this test binary only (the OnceLock is process-wide): --help must not boot.
+        assert!(boot_for_edition(&s(&["--help"]), || PathBuf::from("/unused")).is_none());
+        assert!(
+            boot_for_edition(&s(&[]), || PathBuf::from("/unused")).is_none(),
+            "the first answer sticks"
         );
     }
 }

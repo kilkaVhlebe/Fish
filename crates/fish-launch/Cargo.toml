@@ -1,0 +1,31 @@
+[package]
+name = "fish-launch"
+description = "Launcher wrapper that starts the Fish Edition instead of the stock Horizon client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "fish_launch"
+
+[[bin]]
+name = "fish-launch"
+path = "src/main.rs"
+
+[dependencies]
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Threading"] }
+
+[dev-dependencies]
+fish-test-host = { path = "../fish-test-host" }
+serde_json = "1"
+tempfile = "3.27.0"

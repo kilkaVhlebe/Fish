@@ -11,6 +11,12 @@ use regex::Regex;
 pub struct FishConfig {
     pub version: String,
     pub abi: (u16, u16),
+    pub horizon_commit: String,
+    pub horizon_source_tag: String,
+    pub horizon_release_line: String,
+    pub horizon_release_tag: String,
+    pub mixins_git: String,
+    pub mixins_rev: String,
     pub coverage: BTreeMap<String, f64>,
     pub coverage_exclude: Vec<String>,
 }
@@ -70,9 +76,22 @@ pub fn parse(text: &str) -> Result<FishConfig> {
             }
         }
     }
+    let text_of = |section: &str, key: &str| -> String {
+        doc.get(section)
+            .and_then(|s| s.get(key))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
     Ok(FishConfig {
         version,
         abi,
+        horizon_commit: text_of("horizon", "commit"),
+        horizon_source_tag: text_of("horizon", "source_tag"),
+        horizon_release_line: text_of("horizon", "release_line"),
+        horizon_release_tag: text_of("horizon", "release_tag"),
+        mixins_git: text_of("mixins", "git"),
+        mixins_rev: text_of("mixins", "rev"),
         coverage,
         coverage_exclude,
     })
@@ -130,7 +149,7 @@ pub fn check(root: &Path) -> Result<Vec<String>> {
 mod tests {
     use super::*;
 
-    const FISH: &str = "[fish]\nversion=\"0.1.0\"\nabi={major=0,minor=1}\n[coverage]\na=95\nb=87.5\nexclude=[\"x/*\"]\n";
+    const FISH: &str = "[fish]\nversion=\"0.1.0\"\nabi={major=0,minor=1}\n[horizon]\ncommit=\"abc\"\nsource_tag=\"nightly-source/2026-10-28-abc\"\nrelease_line=\"0.2\"\n[mixins]\ngit=\"g\"\nrev=\"r\"\n[coverage]\na=95\nb=87.5\nexclude=[\"x/*\"]\n";
 
     #[test]
     fn parses_fish_toml() {
@@ -140,6 +159,12 @@ mod tests {
         assert_eq!(c.coverage["a"], 95.0);
         assert_eq!(c.coverage["b"], 87.5);
         assert_eq!(c.coverage_exclude, vec!["x/*"]);
+        assert_eq!(
+            (c.horizon_commit.as_str(), c.horizon_release_line.as_str()),
+            ("abc", "0.2")
+        );
+        assert_eq!((c.mixins_git.as_str(), c.mixins_rev.as_str()), ("g", "r"));
+        assert_eq!(c.horizon_release_tag, "");
         assert!(parse("[fish]\nversion=\"1\"\n").is_err());
         assert!(parse("nope").is_err());
     }

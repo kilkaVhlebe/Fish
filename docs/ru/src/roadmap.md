@@ -41,18 +41,18 @@
 ## P4 — Конвейер Fish Edition и первые хуки
 
 - [x] **P4.1** `fish-hooks`: диспетчер и трейты представлений
-- [ ] **P4.2** `xtask horizon fetch` и `xtask mixins install`
-- [ ] **P4.3** `xtask edition stage`
-- [ ] **P4.4** Пакет horizon-mixins `fish`
-- [ ] **P4.5** Реализации первых хуков на стороне Fish
-- [ ] **P4.6** Сборка, упаковка и selftest
-- [ ] **P4.7** Workflow сборки издания
-- [ ] **P4.8** Локальный игровой e2e (`xtask e2e`)
-- [ ] **P4.9** Документация по изданию
+- [x] **P4.2** `xtask horizon fetch` и `xtask mixins install`
+- [x] **P4.3** `xtask edition stage`
+- [x] **P4.4** Пакет horizon-mixins `fish`
+- [x] **P4.5** Реализации первых хуков на стороне Fish
+- [x] **P4.6** Сборка, упаковка и selftest
+- [x] **P4.7** Workflow сборки издания
+- [x] **P4.8** Локальный игровой e2e (`xtask e2e`)
+- [x] **P4.9** Документация по изданию
 
 ## P5 — Установщик и интеграция с лаунчером
 
-- [ ] **P5.1** Обёртка `fish-launch`
+- [x] **P5.1** Обёртка `fish-launch`
 - [ ] **P5.2** Ядро `fish-installer`
 - [ ] **P5.3** CLI установщика
 - [ ] **P5.4** GUI установщика

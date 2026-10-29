@@ -1,0 +1,84 @@
+name: edition
+
+on:
+  push:
+    paths:
+      - "horizon/**"
+      - "crates/fish-abi/**"
+      - "crates/fish-metadata/**"
+      - "crates/fish-pack/**"
+      - "crates/fish-hooks/**"
+      - "crates/fish-loader/**"
+      - "crates/fish-render/**"
+      - "xtask/**"
+      - "fish.toml"
+      - ".github/workflows/edition.yml"
+  pull_request:
+    paths:
+      - "horizon/**"
+      - "crates/fish-abi/**"
+      - "crates/fish-metadata/**"
+      - "crates/fish-pack/**"
+      - "crates/fish-hooks/**"
+      - "crates/fish-loader/**"
+      - "crates/fish-render/**"
+      - "xtask/**"
+      - "fish.toml"
+      - ".github/workflows/edition.yml"
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  edition:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
+      - name: Read the Horizon commit
+        id: pin
+        shell: bash
+        run: echo "commit=$(grep -m1 '^commit' fish.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Cache the Horizon build
+        uses: actions/cache@v4
+        with:
+          path: |
+            .horizon/target
+            .horizon/tools
+          key: horizon-${{ matrix.os }}-${{ steps.pin.outputs.commit }}-${{ hashFiles('horizon/**', 'crates/fish-*/src/**') }}
+          restore-keys: |
+            horizon-${{ matrix.os }}-${{ steps.pin.outputs.commit }}-
+      - name: Build the edition and run its self test
+        run: cargo xtask edition all --profile fast
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edition-${{ matrix.os }}
+          path: |
+            dist/*.zip
+            target/selftest/report.json
+
+  regressions:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: edition
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
+      - name: Linux packages
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
+      - name: Horizon's own tests, pristine versus staged
+        run: cargo xtask edition regressions

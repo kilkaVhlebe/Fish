@@ -194,7 +194,16 @@ impl Inner {
                 target: target.to_string(),
                 message,
             }),
-            None => log::log!(target: target, level, "{message}"),
+            // Horizon's logger keeps only targets that start with "horizon" (and errors), and does
+            // not print the target: name the source in the message instead.
+            None => {
+                let who = if target == "fish_loader" {
+                    "fish"
+                } else {
+                    target
+                };
+                log::log!(target: "horizon_fish", level, "[{who}] {message}");
+            }
         }
     }
 

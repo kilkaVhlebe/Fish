@@ -357,3 +357,45 @@ pub fn pack_example(package: &str, manifest_text: &str, out_name: &str) -> PathB
     fish_pack::write(spec, &out).expect("write .fish");
     out
 }
+
+/// Builds `bin` of workspace package `package` and returns the executable's path (memoised).
+///
+/// For tests that need a real program to run: the fake game and the fake launcher of `fish-test-tools`.
+pub fn build_tool(package: &str, bin: &str) -> PathBuf {
+    static TOOLS: LazyLock<Mutex<HashMap<String, PathBuf>>> = LazyLock::new(Mutex::default);
+    let _guard = PACK_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let key = format!("{package}/{bin}");
+    if let Some(p) = TOOLS.lock().expect("tools lock").get(&key) {
+        return p.clone();
+    }
+    let root = workspace_root();
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let output = Command::new(cargo)
+        .current_dir(&root)
+        .args([
+            "build",
+            "--locked",
+            "-p",
+            package,
+            "--bin",
+            bin,
+            "--message-format=json",
+            "--target-dir",
+        ])
+        .arg(root.join("target/fish-test-mods"))
+        .output()
+        .expect("spawning cargo");
+    assert!(
+        output.status.success(),
+        "cargo build -p {package} --bin {bin} failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let exe = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter(|v| v["reason"] == "compiler-artifact" && v["target"]["name"] == bin)
+        .find_map(|v| v["executable"].as_str().map(PathBuf::from))
+        .unwrap_or_else(|| panic!("no executable for {package}/{bin}"));
+    TOOLS.lock().expect("tools lock").insert(key, exe.clone());
+    exe
+}

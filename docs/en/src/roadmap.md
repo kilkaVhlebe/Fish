@@ -41,18 +41,18 @@ file and in the Russian copy at the same time.
 ## P4 — Fish Edition pipeline and first hooks
 
 - [x] **P4.1** `fish-hooks`: dispatch and view traits
-- [ ] **P4.2** `xtask horizon fetch` and `xtask mixins install`
-- [ ] **P4.3** `xtask edition stage`
-- [ ] **P4.4** horizon-mixins bundle `fish`
-- [ ] **P4.5** Fish-side implementations of the first hooks
-- [ ] **P4.6** Build, package and selftest
-- [ ] **P4.7** Edition workflow
-- [ ] **P4.8** Local in-game e2e (`xtask e2e`)
-- [ ] **P4.9** Edition docs
+- [x] **P4.2** `xtask horizon fetch` and `xtask mixins install`
+- [x] **P4.3** `xtask edition stage`
+- [x] **P4.4** horizon-mixins bundle `fish`
+- [x] **P4.5** Fish-side implementations of the first hooks
+- [x] **P4.6** Build, package and selftest
+- [x] **P4.7** Edition workflow
+- [x] **P4.8** Local in-game e2e (`xtask e2e`)
+- [x] **P4.9** Edition docs
 
 ## P5 — Installer and launcher integration
 
-- [ ] **P5.1** `fish-launch` wrapper
+- [x] **P5.1** `fish-launch` wrapper
 - [ ] **P5.2** `fish-installer` core
 - [ ] **P5.3** Installer CLI
 - [ ] **P5.4** Installer GUI

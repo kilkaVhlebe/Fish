@@ -15,10 +15,10 @@ source = "modules/bridge.rs"
 
 [[injection]]
 id = "boot"
-target = "horizon_client::game::run"
+target = "horizon_client::spans::enable"
 kind = "HEAD"
 helper = "helpers/boot.rs"
-bindings = [ ]
+bindings = []
 
 [[injection]]
 id = "tick-start"
