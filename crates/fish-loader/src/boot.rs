@@ -244,6 +244,10 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             std::ptr::from_ref(&crate::client_services::COMMAND_RAW) as usize,
         ),
         (
+            fish_abi::networking::SERVICE_NETWORKING,
+            std::ptr::from_ref(&crate::net_services::NETWORKING) as usize,
+        ),
+        (
             fish_abi::commands::SERVICE_COMMANDS,
             std::ptr::from_ref(&crate::command_services::COMMANDS) as usize,
         ),
@@ -438,6 +442,61 @@ fn run_entrypoints(inner: &Inner, rec: &Arc<ModRecord>, key: &str) {
 }
 
 impl Loader {
+    /// Uses `out` as this loader's wire instead of the process-wide one (tests, in-memory pairs).
+    pub fn attach_net(&self, out: std::sync::Arc<dyn fish_hooks::NetOut>) {
+        self.inner.net.attach(out);
+    }
+
+    /// Adds `id` to the Fish registry `registry` on behalf of mod `owner` and returns its raw id.
+    /// Entries of mods that run on both sides are synchronised with the server; the others are
+    /// local. Registration order assigns raw ids.
+    pub fn registry_register(&self, registry: &str, id: &str, owner: &str) -> Result<u32, String> {
+        let rec = self
+            .inner
+            .records()
+            .into_iter()
+            .find(|r| r.manifest.id.as_str() == owner)
+            .ok_or_else(|| format!("no mod {owner}"))?;
+        let synced = rec.manifest.environment == fish_metadata::Environment::Any;
+        Ok(self
+            .inner
+            .net
+            .registries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .register(registry, id, synced, rec.token))
+    }
+
+    /// The raw id of `id` in `registry`, after any synchronisation with a server.
+    pub fn registry_raw(&self, registry: &str, id: &str) -> Option<u32> {
+        self.inner
+            .net
+            .registries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .raw(registry, id)
+    }
+
+    /// The entries of `registry` as `(id, raw)`, in registration order.
+    pub fn registry_entries(&self, registry: &str) -> Vec<(String, u32)> {
+        self.inner
+            .net
+            .registries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entries(registry)
+    }
+
+    /// A stable hash of the synchronised registry entries.
+    pub fn registry_hash(&self) -> String {
+        self.inner
+            .net
+            .registries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .hash()
+    }
+
     /// A snapshot of mods, in load order with failed-at-resolution mods last.
     pub fn mods(&self) -> Vec<ModSummary> {
         self.inner

@@ -20,5 +20,6 @@
   - [Message events](modders/messages.md)
   - [Commands](modders/commands.md)
   - [F3, crashes, stopped mods](modders/debug.md)
+  - [Networking](modders/networking.md)
 - [Tooling](modders/tooling.md)
 - [Testing](modders/testing.md)

@@ -18,6 +18,7 @@ pub mod entity;
 pub mod interaction;
 pub mod lifecycle;
 pub mod message;
+pub mod networking;
 
 use std::ffi::c_void;
 use std::marker::PhantomData;

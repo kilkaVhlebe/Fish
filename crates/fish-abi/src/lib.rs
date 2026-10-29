@@ -21,6 +21,7 @@ pub mod commands;
 pub mod debug;
 pub mod game;
 pub mod ident;
+pub mod networking;
 pub mod services;
 mod tables;
 mod types;

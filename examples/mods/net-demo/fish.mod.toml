@@ -1,0 +1,12 @@
+schema = 1
+id = "net_demo"
+version = "0.1.0"
+name = "Net Demo"
+description = "Fish example mod: custom payloads between client and server"
+license = "MIT"
+
+[library]
+name = "net_demo"
+
+[entrypoints]
+main = ["init"]

@@ -48,7 +48,8 @@ impl TestHost {
         let client = name.starts_with("message/allow_receive")
             || name.starts_with("message/receive")
             || name.contains("send")
-            || name.starts_with("lifecycle/client");
+            || name.starts_with("lifecycle/client")
+            || name.starts_with("networking/client");
         let role = if client {
             self.game_role()
         } else {

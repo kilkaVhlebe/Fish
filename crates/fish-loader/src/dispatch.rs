@@ -321,6 +321,17 @@ impl LoaderDispatch {
         event: &GameEvent<'_>,
     ) -> Outcome {
         let role = game.as_ref().map_or(event.role, |g| g.role());
+        if matches!(
+            event.kind,
+            Kind::NetClientInit
+                | Kind::NetClientJoin
+                | Kind::NetClientDisconnect
+                | Kind::NetServerInit
+                | Kind::NetServerJoin
+                | Kind::NetServerDisconnect
+        ) {
+            self.loader.inner.net_connection(event.kind, event.actor);
+        }
         let out = self.fire_game(reborrow(&mut game), event);
         match event.kind {
             Kind::WorldLoad => {
@@ -521,6 +532,10 @@ impl Dispatch for LoaderDispatch {
             };
             out.extend(lines);
         });
+    }
+
+    fn net_receive(&self, game: &mut dyn ClientView, packet: &fish_hooks::NetPacket<'_>) -> bool {
+        quiet(false, || self.loader.inner.net_receive(game, packet))
     }
 
     fn wants(&self, kind: Kind) -> bool {

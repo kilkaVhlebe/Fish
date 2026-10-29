@@ -127,6 +127,7 @@ pub(crate) struct Inner {
     pub warnings: Mutex<Vec<String>>,
     pub errors: Mutex<Vec<String>>,
     pub commands: Mutex<crate::commands::Commands>,
+    pub net: crate::net::Net,
     /// Chat notices not shown yet (`Fish mod X stopped: reason`).
     pub notices: Mutex<Vec<String>>,
 }
@@ -187,6 +188,7 @@ impl Inner {
                 warnings: Mutex::default(),
                 errors: Mutex::default(),
                 commands: Mutex::default(),
+                net: crate::net::Net::default(),
                 notices: Mutex::default(),
             }
         })
@@ -281,5 +283,6 @@ impl Drop for Inner {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();
+        self.net.clear();
     }
 }

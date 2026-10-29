@@ -17,6 +17,7 @@ pub mod command;
 pub mod event;
 pub mod game;
 pub mod loader;
+pub mod networking;
 
 mod error;
 mod host;

@@ -8,6 +8,7 @@
 #![deny(missing_docs)]
 
 pub mod events;
+pub mod net;
 pub mod script;
 pub mod sim;
 

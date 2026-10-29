@@ -185,6 +185,7 @@ pub(crate) fn lookup(id: &str) -> Option<*const c_void> {
         ids::INPUT => (&raw const INPUT).cast(),
         ids::COMMAND_RAW => (&raw const COMMAND_RAW).cast(),
         fish_abi::commands::SERVICE_COMMANDS => (&raw const COMMANDS).cast(),
+        fish_abi::networking::SERVICE_NETWORKING => (&raw const NETWORKING).cast(),
         _ => return None,
     })
 }
@@ -747,4 +748,228 @@ fn f3_lines_are_added_through_the_host() {
     c.add_line("one");
     c.add_line("two");
     assert_eq!(lines, ["one", "two"]);
+}
+
+// ---- networking ----
+
+use fish_abi::networking::{NameSink, NetPayloadV1, NetRecvFn, NetworkingServiceV1};
+
+static NET_LOG: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static NET_RECV: Mutex<Option<(NetRecvFn, usize)>> = Mutex::new(None);
+static NET_SERIAL: Mutex<()> = Mutex::new(());
+
+unsafe extern "C" fn n_type(_: *mut c_void, _: u64, dir: u8, id: FishStr, max: u32) -> FishStatus {
+    NET_LOG.lock().unwrap().push(format!(
+        "type {dir} {} {max}",
+        unsafe { id.as_str() }.unwrap()
+    ));
+    if max == 0 {
+        FishStatus::INVALID_ARGUMENT
+    } else {
+        FishStatus::OK
+    }
+}
+
+unsafe extern "C" fn n_recv(
+    _: *mut c_void,
+    _: u64,
+    dir: u8,
+    id: FishStr,
+    func: NetRecvFn,
+    user: *mut c_void,
+    drop_user: Option<DropUserFn>,
+) -> FishStatus {
+    let id = unsafe { id.as_str() }.unwrap();
+    NET_LOG.lock().unwrap().push(format!("recv {dir} {id}"));
+    if id == "refused" {
+        return FishStatus::ALREADY_EXISTS;
+    }
+    *NET_RECV.lock().unwrap() = Some((func, user as usize));
+    let _ = drop_user;
+    FishStatus::OK
+}
+
+unsafe extern "C" fn n_to_server(
+    _: *mut c_void,
+    dir: u8,
+    id: FishStr,
+    data: *const u8,
+    len: usize,
+) -> FishStatus {
+    let bytes = unsafe { std::slice::from_raw_parts(data, len) };
+    NET_LOG.lock().unwrap().push(format!(
+        "to_server {dir} {} {bytes:?}",
+        unsafe { id.as_str() }.unwrap()
+    ));
+    FishStatus::OK
+}
+
+unsafe extern "C" fn n_to_player(
+    _: *mut c_void,
+    dir: u8,
+    player: FishStr,
+    id: FishStr,
+    data: *const u8,
+    len: usize,
+) -> FishStatus {
+    let bytes = unsafe { std::slice::from_raw_parts(data, len) };
+    NET_LOG.lock().unwrap().push(format!(
+        "to_player {dir} [{}] {} {bytes:?}",
+        unsafe { player.as_str() }.unwrap(),
+        unsafe { id.as_str() }.unwrap()
+    ));
+    FishStatus::OK
+}
+
+unsafe extern "C" fn n_can(_: *mut c_void, _: u8, player: FishStr, _: FishStr) -> u8 {
+    u8::from(unsafe { player.as_str() } == Ok("Alex"))
+}
+
+unsafe extern "C" fn n_players(_: *mut c_void, _: u8, sink: NameSink, user: *mut c_void) {
+    unsafe {
+        sink(user, FishStr::new("Alex"));
+        sink(user, FishStr::new("Bo"));
+    }
+}
+
+static NETWORKING: NetworkingServiceV1 = NetworkingServiceV1 {
+    header: FishServiceHeader {
+        size: size_of::<NetworkingServiceV1>(),
+        version: 1,
+    },
+    register_type: n_type,
+    register_receiver: n_recv,
+    send_to_server: n_to_server,
+    send_to_player: n_to_player,
+    can_send: n_can,
+    players: n_players,
+};
+
+#[test]
+fn networking_calls_reach_the_host_and_receivers_get_context() {
+    use crate::networking::*;
+    let _serial = NET_SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    crate::fake::install();
+    NET_LOG.lock().unwrap().clear();
+    PayloadTypeRegistry::play_s2c().register("m:a", 10).unwrap();
+    PayloadTypeRegistry::play_c2s().register("m:b", 20).unwrap();
+    PayloadTypeRegistry::configuration_s2c()
+        .register("m:c", 30)
+        .unwrap();
+    PayloadTypeRegistry::configuration_c2s()
+        .register("m:d", 40)
+        .unwrap();
+    assert_eq!(
+        PayloadTypeRegistry::play_s2c()
+            .register("m:z", 0)
+            .unwrap_err()
+            .status(),
+        Some(FishStatus::INVALID_ARGUMENT)
+    );
+    assert!(
+        PayloadTypeRegistry::play_s2c()
+            .register("m:big", usize::MAX)
+            .is_err()
+    );
+    ClientPlayNetworking::register_global_receiver("m:a", |_| {}).unwrap();
+    ServerPlayNetworking::register_global_receiver("m:b", |_| {}).unwrap();
+    ClientConfigurationNetworking::register_global_receiver("m:c", |_| {}).unwrap();
+    assert!(ServerConfigurationNetworking::register_global_receiver("refused", |_| {}).is_err());
+    ClientPlayNetworking::send("m:b", &[1, 2]).unwrap();
+    ClientConfigurationNetworking::send("m:d", &[]).unwrap();
+    ServerPlayNetworking::send("Alex", "m:a", &[3]).unwrap();
+    ServerPlayNetworking::send_all("m:a", &[4]).unwrap();
+    ServerConfigurationNetworking::send("Bo", "m:c", &[5]).unwrap();
+    assert!(ServerPlayNetworking::can_send("Alex", "m:a").unwrap());
+    assert!(!ServerPlayNetworking::can_send("Bo", "m:a").unwrap());
+    assert!(!ClientPlayNetworking::can_send("m:b").unwrap());
+    assert_eq!(ServerPlayNetworking::players().unwrap(), ["Alex", "Bo"]);
+    let log = NET_LOG.lock().unwrap().clone();
+    for want in [
+        "type 0 m:a 10",
+        "type 1 m:b 20",
+        "type 2 m:c 30",
+        "type 3 m:d 40",
+        "recv 0 m:a",
+        "recv 1 m:b",
+        "recv 2 m:c",
+        "recv 3 refused",
+        "to_server 1 m:b [1, 2]",
+        "to_server 3 m:d []",
+        "to_player 0 [Alex] m:a [3]",
+        "to_player 0 [] m:a [4]",
+        "to_player 2 [Bo] m:c [5]",
+    ] {
+        assert!(log.iter().any(|l| l == want), "{want} in {log:?}");
+    }
+    // the last registered receiver is the one for "m:c": call it with a payload
+    let seen = std::sync::Arc::new(Mutex::new(String::new()));
+    let s2 = seen.clone();
+    ClientPlayNetworking::register_global_receiver("m:a", move |ctx| {
+        *s2.lock().unwrap() = format!(
+            "{} {:?} {:?} {} {:?}",
+            ctx.channel(),
+            ctx.data(),
+            ctx.player_uuid(),
+            ctx.player_name(),
+            ctx.client().role().is_err()
+        );
+    })
+    .unwrap();
+    let (func, user) = NET_RECV.lock().unwrap().take().unwrap();
+    let data = [9u8, 8];
+    let payload = NetPayloadV1 {
+        size: size_of::<NetPayloadV1>() as u32,
+        dir: 0,
+        reserved: [0; 3],
+        channel: FishStr::new("m:a"),
+        data: data.as_ptr(),
+        len: 2,
+        sender: FishStr::new("Alex"),
+        sender_uuid: 5u128.to_be_bytes(),
+        view: handle(STALE),
+    };
+    assert_eq!(
+        unsafe { func(user as *mut c_void, &payload) },
+        FishStatus::OK
+    );
+    assert_eq!(*seen.lock().unwrap(), "m:a [9, 8] Some(5) Alex true");
+    let empty = NetPayloadV1 {
+        data: std::ptr::null(),
+        len: 0,
+        sender_uuid: [0; 16],
+        ..payload
+    };
+    assert_eq!(unsafe { func(user as *mut c_void, &empty) }, FishStatus::OK);
+    assert!(seen.lock().unwrap().contains("[] None"));
+}
+
+#[test]
+fn packet_buffers_round_trip_and_report_truncation() {
+    use crate::networking::{PacketBuf, PacketReader};
+    let b = PacketBuf::new()
+        .u8(7)
+        .bool(true)
+        .i32(-5)
+        .i64(1 << 40)
+        .f32(1.5)
+        .f64(-2.25)
+        .varint(300)
+        .string("héllo")
+        .bytes(&[1, 2]);
+    let mut r = PacketReader::new(b.as_bytes());
+    assert_eq!(r.read_u8().unwrap(), 7);
+    assert!(r.read_bool().unwrap());
+    assert_eq!(r.read_i32().unwrap(), -5);
+    assert_eq!(r.read_i64().unwrap(), 1 << 40);
+    assert_eq!(r.read_f32().unwrap(), 1.5);
+    assert_eq!(r.read_f64().unwrap(), -2.25);
+    assert_eq!(r.read_varint().unwrap(), 300);
+    assert_eq!(r.read_string().unwrap(), "héllo");
+    assert_eq!(r.remaining(), [1, 2]);
+    assert!(r.read_i64().is_err(), "two bytes cannot hold an i64");
+    assert_eq!(PacketBuf::new().varint(0).into_vec(), [0]);
+    assert_eq!(PacketBuf::new().varint(u32::MAX).as_bytes().len(), 5);
+    assert!(PacketReader::new(&[0x80; 6]).read_varint().is_err());
+    assert!(PacketReader::new(&[2, 0xff, 0xfe]).read_string().is_err());
 }
