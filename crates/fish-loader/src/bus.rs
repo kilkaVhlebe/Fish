@@ -185,6 +185,12 @@ impl EventBus {
             .map_or(0, |e| e.count.load(Ordering::Acquire))
     }
 
+    /// True when at least one listener is registered on the event.
+    pub(crate) fn has_listeners(&self, index: EventIndex) -> bool {
+        self.get(index.0)
+            .is_some_and(|e| e.count.load(Ordering::Acquire) > 0)
+    }
+
     fn find_phase(cfg: &mut EventConfig, phase: &str) -> usize {
         if let Some(i) = cfg.phases.iter().position(|p| p == phase) {
             return i;

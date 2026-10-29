@@ -1,0 +1,97 @@
+name = "events-demo reacts to lifecycle, interaction, entity and message events"
+
+[[step]]
+game = true
+[step.expect]
+logs = ["server starting", "world loaded: minecraft:overworld", "server started", "client started"]
+
+[[step]]
+join = "Alex"
+[step.expect]
+logs = ["welcome Alex"]
+
+[[step]]
+break_block = { pos = [1, 64, 2], block = "minecraft:bedrock" }
+[step.expect]
+logs = ["refusing to break bedrock at 1 64 2", "break canceled at 1 64 2"]
+outcome = "pass"
+events = ["interaction/block_break_before cancel", "interaction/block_break_canceled pass"]
+no_events = ["block_break_after"]
+broken = []
+
+[[step]]
+break_block = { pos = [3, 70, 3], block = "minecraft:dirt" }
+ticks = 1
+[step.expect]
+logs = ["minecraft:dirt broke at 3 70 3"]
+broken = ["3 70 3 minecraft:dirt"]
+events = ["interaction/block_break_after"]
+
+[[step]]
+use_block = { pos = [0, 64, 0], block = "minecraft:obsidian", item = "minecraft:stick" }
+[step.expect]
+logs = ["a stick does nothing to obsidian (client)"]
+outcome = "cancel"
+no_events = ["use_block handled"]
+
+[[step]]
+use_block = { pos = [0, 64, 0], block = "minecraft:obsidian", item = "minecraft:diamond_pickaxe" }
+[step.expect]
+outcome = "pass"
+
+[[step]]
+attack_entity = { id = 42, type = "minecraft:cow" }
+[step.expect]
+logs = ["Steve attacks minecraft:cow #42"]
+
+[[step]]
+damage = { id = 5, type = "minecraft:zombie", amount = 3.0, source = "minecraft:fall" }
+[step.expect]
+no_events = ["entity/after_damage"]
+
+[[step]]
+damage = { id = 5, type = "minecraft:zombie", amount = 3.0, source = "minecraft:generic" }
+death = { id = 5, type = "minecraft:zombie" }
+[step.expect]
+logs = ["minecraft:zombie took 3 damage (minecraft:generic)", "minecraft:zombie #5 died"]
+
+[[step]]
+chat_in = { actor = "Alex", text = "hello everyone" }
+[step.expect]
+broadcast = ["<Alex> hello everyone"]
+
+[[step]]
+chat_in = { actor = "Alex", text = "a badword here" }
+[step.expect]
+logs = ["dropped a message from Alex"]
+events = ["message/allow_chat cancel"]
+
+[[step]]
+chat_out = "look :fish: !"
+[step.expect]
+sent_chat = ["look ><> !"]
+events = ["message/modify_send replace:look ><> !"]
+
+[[step]]
+chat_received = { text = "buy spam now", source = "player" }
+chat_in = { actor = "Bo", text = "kept" }
+[step.expect]
+events = ["message/allow_receive cancel"]
+received = []
+
+[[step]]
+command = "fishdemo"
+[step.expect]
+command_feedback = ["events-demo is listening"]
+
+[[step]]
+reload = true
+ticks = 1
+[step.expect]
+logs = ["reload started", "reload finished"]
+
+[[step]]
+leave = "Alex"
+game = false
+[step.expect]
+logs = ["goodbye Alex", "server stopping", "world unloading: minecraft:overworld", "server stopped", "client stopped"]

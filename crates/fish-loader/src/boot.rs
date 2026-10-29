@@ -219,7 +219,10 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
         },
     );
 
-    for (id, combine) in crate::dispatch::HOST_EVENTS {
+    for (id, combine) in crate::dispatch::HOST_EVENTS
+        .into_iter()
+        .chain(fish_abi::game::EVENTS)
+    {
         let status = inner.bus.define(id, combine);
         debug_assert!(status.is_ok(), "defining {id}");
     }

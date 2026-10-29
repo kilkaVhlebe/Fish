@@ -5,8 +5,9 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use fish_abi::client::{CommandPayload, FramePayload, HudPayload, KeyPayload, TickPayload, ids};
-use fish_abi::{ActionResult, COMBINE_FIRST_NON_PASS, COMBINE_NOTIFY, FishStr};
-use fish_hooks::{ClientView, Dispatch, HudView, NativeModRow};
+use fish_abi::game::{EVENTS, GamePayload};
+use fish_abi::{ActionResult, COMBINE_FIRST_NON_PASS, COMBINE_NOTIFY, FishHandle, FishStr};
+use fish_hooks::{ClientView, Dispatch, GameEvent, HudView, Kind, NativeModRow, Outcome};
 
 use crate::boot::Loader;
 use crate::bus::EventIndex;
@@ -24,6 +25,7 @@ pub struct LoaderDispatch {
     hud: EventIndex,
     command: EventIndex,
     key: EventIndex,
+    game: Vec<EventIndex>,
     ticks: [AtomicU64; 3],
 }
 
@@ -61,6 +63,7 @@ impl LoaderDispatch {
             hud: idx(ids::HUD_RENDER),
             command: idx(ids::RAW_COMMAND),
             key: idx(ids::KEY),
+            game: EVENTS.iter().map(|(id, _)| idx(id)).collect(),
             loader,
             ticks: Default::default(),
         }
@@ -104,7 +107,78 @@ impl LoaderDispatch {
     }
 }
 
+unsafe extern "C" fn collect_replacement(user: *mut c_void, text: FishStr) {
+    // SAFETY: `user` is the `Option<String>` of `game_event`; the text is valid UTF-8 or rejected.
+    unsafe {
+        if let Ok(s) = text.as_str() {
+            *user.cast::<Option<String>>() = Some(s.to_string());
+        }
+    }
+}
+
+impl LoaderDispatch {
+    fn fire_game(&self, game: Option<&mut dyn ClientView>, e: &GameEvent<'_>) -> Outcome {
+        let index = self.game[e.kind as usize];
+        let inner = &self.loader.inner;
+        if !inner.bus.has_listeners(index) {
+            return Outcome::Pass;
+        }
+        let role = game.as_ref().map_or(e.role, |g| g.role());
+        let fire = |view| {
+            let mut p = GamePayload::new(role_byte(role), view);
+            p.is_client = u8::from(e.is_client);
+            p.hand = e.hand;
+            p.face = e.face;
+            p.pos = e.pos;
+            p.entity_id = e.entity_id;
+            p.amount = e.amount;
+            p.actor_uuid = e.actor_uuid;
+            p.actor = FishStr::new(e.actor);
+            p.dimension = FishStr::new(e.dimension);
+            p.subject = FishStr::new(e.subject);
+            p.item = FishStr::new(e.item);
+            p.extra = FishStr::new(e.extra);
+            let mut replaced: Option<String> = None;
+            if e.rewritable {
+                p.replace = Some(collect_replacement);
+                p.replace_user = (&raw mut replaced).cast();
+            }
+            let mut result = ActionResult::Pass.as_u8();
+            let out: *mut c_void = if EVENTS[e.kind as usize].1 == COMBINE_FIRST_NON_PASS {
+                (&raw mut result).cast()
+            } else {
+                std::ptr::null_mut()
+            };
+            // SAFETY: the payload and result match the event's documented layout.
+            unsafe { inner.bus.invoke(index, (&raw mut p).cast(), out) };
+            match ActionResult::from_u8(result) {
+                Some(ActionResult::Fail) => Outcome::Cancel,
+                Some(ActionResult::Pass) | None => replaced.map_or(Outcome::Pass, Outcome::Replace),
+                Some(_) => Outcome::Handled,
+            }
+        };
+        match game {
+            Some(g) => inner.handles.client_scope(g, fire),
+            None => fire(FishHandle {
+                index: u32::MAX,
+                generation: 0,
+            }),
+        }
+    }
+}
+
 impl Dispatch for LoaderDispatch {
+    fn game_event(&self, game: Option<&mut dyn ClientView>, event: &GameEvent<'_>) -> Outcome {
+        quiet(Outcome::Pass, || self.fire_game(game, event))
+    }
+
+    fn wants(&self, kind: Kind) -> bool {
+        self.loader
+            .inner
+            .bus
+            .has_listeners(self.game[kind as usize])
+    }
+
     fn tick_start(&self, game: &mut dyn ClientView) {
         quiet((), || self.tick(game, true));
     }
@@ -234,4 +308,22 @@ pub fn install_global(loader: Loader) -> &'static Loader {
     let dispatch = GLOBAL.get_or_init(|| LoaderDispatch::new(loader));
     fish_hooks::install(dispatch);
     dispatch.loader()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_hooks_kinds_and_the_abi_table_agree() {
+        assert_eq!(Kind::ALL.len(), EVENTS.len());
+        for (kind, (id, _)) in Kind::ALL.iter().zip(EVENTS) {
+            assert_eq!(id, format!("fish:{}", kind.name()), "{kind:?}");
+            assert_eq!(
+                Kind::ALL[*kind as usize],
+                *kind,
+                "{kind:?} is its own table index"
+            );
+        }
+    }
 }

@@ -14,6 +14,7 @@
 
 pub mod client;
 pub mod event;
+pub mod game;
 pub mod loader;
 
 mod error;

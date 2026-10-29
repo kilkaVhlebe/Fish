@@ -1,0 +1,12 @@
+schema = 1
+id = "events_demo"
+version = "0.1.0"
+name = "Events Demo"
+description = "Fish example mod: lifecycle, interaction, entity and message events"
+license = "MIT"
+
+[library]
+name = "events_demo"
+
+[entrypoints]
+main = ["init"]

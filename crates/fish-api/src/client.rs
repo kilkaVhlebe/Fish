@@ -72,6 +72,10 @@ unsafe extern "C" fn collect(user: *mut c_void, text: FishStr) {
 pub struct ClientHandle(FishHandle);
 
 impl ClientHandle {
+    pub(crate) fn from_raw(handle: FishHandle) -> ClientHandle {
+        ClientHandle(handle)
+    }
+
     /// The game's role.
     pub fn role(&self) -> Result<Role, Error> {
         let (svc, host) = service::<ClientServiceV1>(ids::CLIENT)?;

@@ -13,7 +13,10 @@
 //! host marks the mod failed.
 
 pub mod client;
+pub mod entity;
+pub mod interaction;
 pub mod lifecycle;
+pub mod message;
 
 use std::ffi::c_void;
 use std::marker::PhantomData;

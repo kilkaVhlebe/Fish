@@ -17,6 +17,7 @@
 #![deny(missing_docs)]
 
 pub mod client;
+pub mod game;
 pub mod ident;
 pub mod services;
 mod tables;

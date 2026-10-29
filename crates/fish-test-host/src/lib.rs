@@ -7,6 +7,7 @@
 
 #![deny(missing_docs)]
 
+pub mod events;
 pub mod script;
 pub mod sim;
 
@@ -157,10 +158,13 @@ impl TestHost {
     }
 
     fn tick_as(&mut self, role: Role, n: u32) {
-        let (mut view, dispatch) = self.view(role);
         for _ in 0..n {
-            dispatch.tick_start(&mut view);
-            dispatch.tick_end(&mut view);
+            {
+                let (mut view, dispatch) = self.view(role);
+                dispatch.tick_start(&mut view);
+                dispatch.tick_end(&mut view);
+            }
+            self.after_tick();
         }
     }
 
@@ -288,7 +292,7 @@ static PACK_LOCK: Mutex<()> = Mutex::new(());
 /// Uses a private target directory (`target/fish-test-mods`) so it never blocks on the outer
 /// `cargo test` lock.
 pub fn build_example(package: &str) -> PathBuf {
-    let mut built = BUILT.lock().expect("build lock");
+    let mut built = BUILT.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(p) = built.get(package) {
         return p.clone();
     }
@@ -331,7 +335,9 @@ pub fn pack_example(package: &str, manifest_text: &str, out_name: &str) -> PathB
     let library = String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-        .filter(|v| v["reason"] == "compiler-artifact" && v["target"]["name"] == package)
+        .filter(|v| {
+            v["reason"] == "compiler-artifact" && v["target"]["name"] == package.replace('-', "_")
+        })
         .flat_map(|v| v["filenames"].as_array().cloned().unwrap_or_default())
         .filter_map(|f| f.as_str().map(PathBuf::from))
         .find(|p| {

@@ -350,3 +350,63 @@ fn the_events_have_the_documented_ids_and_modes() {
     );
     assert_eq!(crate::client::input::KEY.id(), "fish:input/key");
 }
+
+#[test]
+fn game_contexts_read_every_field_and_rewrite_text() {
+    use fish_abi::game::{FACE_NONE, GamePayload};
+
+    use crate::game::{BlockPos, Face, GameContext, Hand};
+
+    unsafe extern "C" fn store(user: *mut c_void, text: FishStr) {
+        unsafe { *user.cast::<String>() = text.as_str().unwrap().to_string() };
+    }
+    let mut stored = String::new();
+    let mut p = GamePayload::new(ROLE_INTEGRATED_SERVER, handle(1));
+    p.is_client = 1;
+    p.hand = 1;
+    p.face = 2;
+    p.pos = [1, -2, 3];
+    p.entity_id = 77;
+    p.amount = 2.5;
+    p.actor_uuid = 42u128.to_be_bytes();
+    p.actor = FishStr::new("Steve");
+    p.dimension = FishStr::new("minecraft:overworld");
+    p.subject = FishStr::new("minecraft:stone");
+    p.item = FishStr::new("minecraft:stick");
+    p.extra = FishStr::new("player");
+    p.replace = Some(store);
+    p.replace_user = (&raw mut stored).cast();
+    let mut c: GameContext = unsafe { std::mem::transmute(p) };
+    assert!(c.is_client() && c.hand() == Hand::Off && c.face() == Some(Face::North));
+    assert_eq!(c.face().unwrap().name(), "north");
+    assert_eq!(c.pos(), BlockPos { x: 1, y: -2, z: 3 });
+    assert_eq!(c.pos().to_string(), "1 -2 3");
+    assert_eq!(
+        (c.entity_id(), c.amount(), c.actor_uuid()),
+        (77, 2.5, Some(42))
+    );
+    assert_eq!(
+        (c.actor(), c.dimension(), c.subject(), c.item(), c.extra()),
+        (
+            "Steve",
+            "minecraft:overworld",
+            "minecraft:stone",
+            "minecraft:stick",
+            "player"
+        )
+    );
+    assert_eq!(c.role(), Role::IntegratedServer);
+    assert_eq!(c.client().role().unwrap(), Role::IntegratedServer);
+    assert!(c.replace_text("edited"));
+    assert_eq!(stored, "edited");
+
+    let mut q = GamePayload::new(ROLE_DEDICATED_SERVER, handle(2));
+    assert_eq!((q.face, q.hand), (FACE_NONE, 0));
+    q.replace = None;
+    let mut c: GameContext = unsafe { std::mem::transmute(q) };
+    assert!(!c.replace_text("x"), "not rewritable");
+    assert_eq!(
+        (c.face(), c.actor_uuid(), c.hand(), c.role()),
+        (None, None, Hand::Main, Role::DedicatedServer)
+    );
+}
