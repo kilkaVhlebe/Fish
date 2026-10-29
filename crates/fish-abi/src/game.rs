@@ -100,10 +100,22 @@ pub mod ids {
     pub const MODIFY_SEND: &str = "fish:message/modify_send";
     /// The player's chat line was sent. `subject`.
     pub const SEND: &str = "fish:message/send";
+    /// The client's connection starts configuring (before the world). `actor` = empty.
+    pub const NET_CLIENT_INIT: &str = "fish:networking/client_init";
+    /// The client entered the play phase of a server connection.
+    pub const NET_CLIENT_JOIN: &str = "fish:networking/client_join";
+    /// The client's server connection closed. `subject` = reason when known.
+    pub const NET_CLIENT_DISCONNECT: &str = "fish:networking/client_disconnect";
+    /// A player's connection starts configuring on the server. `actor`, `actor_uuid`.
+    pub const NET_SERVER_INIT: &str = "fish:networking/server_init";
+    /// A player's connection entered the play phase on the server. `actor`, `actor_uuid`.
+    pub const NET_SERVER_JOIN: &str = "fish:networking/server_join";
+    /// A player's connection closed. `actor`, `actor_uuid`, `subject` = reason when known.
+    pub const NET_SERVER_DISCONNECT: &str = "fish:networking/server_disconnect";
 }
 
 /// Every game event with its combine mode, in the order of `fish_hooks::Kind`.
-pub const EVENTS: [(&str, u8); 44] = [
+pub const EVENTS: [(&str, u8); 50] = [
     (ids::CLIENT_STARTED, COMBINE_NOTIFY),
     (ids::CLIENT_STOPPING, COMBINE_NOTIFY),
     (ids::CLIENT_STOPPED, COMBINE_NOTIFY),
@@ -148,6 +160,12 @@ pub const EVENTS: [(&str, u8); 44] = [
     (ids::ALLOW_SEND, COMBINE_FIRST_NON_PASS),
     (ids::MODIFY_SEND, COMBINE_NOTIFY),
     (ids::SEND, COMBINE_NOTIFY),
+    (ids::NET_CLIENT_INIT, COMBINE_NOTIFY),
+    (ids::NET_CLIENT_JOIN, COMBINE_NOTIFY),
+    (ids::NET_CLIENT_DISCONNECT, COMBINE_NOTIFY),
+    (ids::NET_SERVER_INIT, COMBINE_NOTIFY),
+    (ids::NET_SERVER_JOIN, COMBINE_NOTIFY),
+    (ids::NET_SERVER_DISCONNECT, COMBINE_NOTIFY),
 ];
 
 /// [`GamePayload::hand`]: main hand.

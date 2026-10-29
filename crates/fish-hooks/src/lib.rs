@@ -209,11 +209,23 @@ pub enum Kind {
     ModifySend,
     /// The player's chat line was sent. `subject`.
     Send,
+    /// The client's connection starts configuring (before the world). `actor` = empty.
+    NetClientInit,
+    /// The client entered the play phase of a server connection.
+    NetClientJoin,
+    /// The client's server connection closed. `subject` = reason when known.
+    NetClientDisconnect,
+    /// A player's connection starts configuring on the server. `actor`, `actor_uuid`.
+    NetServerInit,
+    /// A player's connection entered the play phase on the server. `actor`, `actor_uuid`.
+    NetServerJoin,
+    /// A player's connection closed. `actor`, `actor_uuid`, `subject` = reason when known.
+    NetServerDisconnect,
 }
 
 impl Kind {
     /// Every kind, in table order.
-    pub const ALL: [Kind; 44] = [
+    pub const ALL: [Kind; 50] = [
         Kind::ClientStarted,
         Kind::ClientStopping,
         Kind::ClientStopped,
@@ -258,6 +270,12 @@ impl Kind {
         Kind::AllowSend,
         Kind::ModifySend,
         Kind::Send,
+        Kind::NetClientInit,
+        Kind::NetClientJoin,
+        Kind::NetClientDisconnect,
+        Kind::NetServerInit,
+        Kind::NetServerJoin,
+        Kind::NetServerDisconnect,
     ];
 
     /// `group/name` as it appears after `fish:` in the event id.
@@ -307,6 +325,12 @@ impl Kind {
             Kind::AllowSend => "message/allow_send",
             Kind::ModifySend => "message/modify_send",
             Kind::Send => "message/send",
+            Kind::NetClientInit => "networking/client_init",
+            Kind::NetClientJoin => "networking/client_join",
+            Kind::NetClientDisconnect => "networking/client_disconnect",
+            Kind::NetServerInit => "networking/server_init",
+            Kind::NetServerJoin => "networking/server_join",
+            Kind::NetServerDisconnect => "networking/server_disconnect",
         }
     }
 }
@@ -390,6 +414,59 @@ impl Outcome {
     }
 }
 
+/// Which phase of a connection a custom payload travels in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NetPhase {
+    /// The configuration phase (before the world loads).
+    Configuration,
+    /// The play phase.
+    Play,
+}
+
+/// A custom payload (`CustomPayload { channel, data }`) that arrived at this game.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetPacket<'a> {
+    /// The phase it arrived in.
+    pub phase: NetPhase,
+    /// The channel, `namespace:path`.
+    pub channel: &'a str,
+    /// The payload bytes.
+    pub data: &'a [u8],
+    /// On a server: the sending player's name (and UUID bytes). `None` on a client.
+    pub from: Option<(&'a str, [u8; 16])>,
+}
+
+/// How Fish puts payloads on the wire. The edition's bridge implements it over Horizon's
+/// connections; tests implement it in memory. Methods must not block.
+pub trait NetOut: Send + Sync {
+    /// Client side: sends a payload to the server this client is connected to.
+    fn to_server(&self, phase: NetPhase, channel: &str, data: &[u8]) -> Result<(), String>;
+    /// Server side: sends a payload to the named player, or to every player when `player` is `None`.
+    fn to_player(
+        &self,
+        phase: NetPhase,
+        player: Option<&str>,
+        channel: &str,
+        data: &[u8],
+    ) -> Result<(), String>;
+    /// Server side: kicks `player` with `reason`. Client side (`player` `None`): leaves the server.
+    fn disconnect(&self, player: Option<&str>, reason: &str);
+    /// Server side: names of the players currently connected in `phase`.
+    fn players(&self, phase: NetPhase) -> Vec<String>;
+}
+
+static NET_OUT: OnceLock<&'static dyn NetOut> = OnceLock::new();
+
+/// Installs the process-wide wire implementation; returns false if one is already installed.
+pub fn install_net(out: &'static dyn NetOut) -> bool {
+    NET_OUT.set(out).is_ok()
+}
+
+/// The installed wire implementation, if any.
+pub fn net_out() -> Option<&'static dyn NetOut> {
+    NET_OUT.get().copied()
+}
+
 /// What Horizon's hook points call. Every method defaults to doing nothing.
 pub trait Dispatch: Send + Sync {
     /// Start of a game tick, in every `Game`.
@@ -433,6 +510,11 @@ pub trait Dispatch: Send + Sync {
     }
     /// The vanilla command `root` shadows Fish's command of the same name.
     fn shadowed_command(&self, _root: &str) {}
+    /// A custom payload arrived. Returns true when a registered receiver consumed it; the game
+    /// then ignores the packet (an unclaimed channel stays with the game).
+    fn net_receive(&self, _game: &mut dyn ClientView, _packet: &NetPacket<'_>) -> bool {
+        false
+    }
     /// Lines appended to the F3 screen.
     fn debug_lines(&self, _out: &mut Vec<String>) {}
     /// Lines for the crash report's details (`key`, `value`): the Fish version, the mods, the failed mods.
