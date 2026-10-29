@@ -32,11 +32,11 @@ file and in the Russian copy at the same time.
 
 ## P3 — Dev tooling (`cargo-fish`)
 
-- [ ] **P3.1** `cargo fish new`
-- [ ] **P3.2** `cargo fish build`
-- [ ] **P3.3** `cargo fish check`
-- [ ] **P3.4** `cargo fish test`
-- [ ] **P3.5** Tooling and testing docs
+- [x] **P3.1** `cargo fish new`
+- [x] **P3.2** `cargo fish build`
+- [x] **P3.3** `cargo fish check`
+- [x] **P3.4** `cargo fish test`
+- [x] **P3.5** Tooling and testing docs
 
 ## P4 — Fish Edition pipeline and first hooks
 

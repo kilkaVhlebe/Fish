@@ -1,0 +1,6 @@
+name = "hello greets from both entrypoints"
+
+[[step]]
+ticks = 1
+[step.expect]
+logs = ["Hello from main", "Hello from client"]

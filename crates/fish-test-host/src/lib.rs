@@ -7,6 +7,9 @@
 
 #![deny(missing_docs)]
 
+pub mod script;
+pub mod sim;
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -25,6 +28,8 @@ pub struct TestHost {
     dev_mods: Vec<PathBuf>,
     logs: Arc<Mutex<Vec<LogRecord>>>,
     loader: Option<Loader>,
+    /// The simulated client driven by scripts.
+    pub sim: sim::Sim,
 }
 
 impl Default for TestHost {
@@ -44,6 +49,7 @@ impl TestHost {
             dev_mods: Vec::new(),
             logs: Arc::default(),
             loader: None,
+            sim: sim::Sim::default(),
         }
     }
 

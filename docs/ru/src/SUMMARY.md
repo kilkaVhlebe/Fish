@@ -8,3 +8,5 @@
 - [Манифест мода](modders/manifest.md)
 - [Быстрый старт](modders/getting-started.md)
 - [События](modders/events.md)
+- [Инструменты](modders/tooling.md)
+- [Тестирование](modders/testing.md)

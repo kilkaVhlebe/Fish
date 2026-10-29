@@ -194,6 +194,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
+name = "cargo-fish"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "fish-loader",
+ "fish-metadata",
+ "fish-pack",
+ "fish-test-host",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -427,8 +442,10 @@ dependencies = [
  "fish-api",
  "fish-loader",
  "fish-pack",
+ "serde",
  "serde_json",
  "tempfile",
+ "toml",
 ]
 
 [[package]]

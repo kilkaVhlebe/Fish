@@ -8,3 +8,5 @@
 - [Mod manifest](modders/manifest.md)
 - [Getting started](modders/getting-started.md)
 - [Events](modders/events.md)
+- [Tooling](modders/tooling.md)
+- [Testing](modders/testing.md)
