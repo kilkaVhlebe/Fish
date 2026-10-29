@@ -1,0 +1,6 @@
+/target
+/dist
+/.horizon
+/docs/*/book
+*.fish
+!examples/**/fixtures/*.fish

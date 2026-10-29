@@ -1,0 +1,29 @@
+# Single source of truth for versions, pins, coverage gates and release settings.
+[fish]
+version = "0.1.0"                       # must equal [workspace.package].version (xtask check)
+abi = { major = 0, minor = 1 }          # must equal fish-abi constants (xtask check)
+
+[horizon]
+commit = "6f8c7a0e5d531d3834c4d0be4659a1db8e7e5c2a"
+source_tag = "nightly-source/2026-10-28-6f8c7a0"
+release_line = "0.2"
+release_tag = ""                        # launcher-installable dated release tag; set by `xtask horizon pin`
+
+[mixins]
+git = "https://github.com/horizon-rust/horizon-mixins"
+rev = "0d6b103c70633d8fd9443d8d0acd3aadaacedb06"
+
+[release]
+github = ""                             # "owner/repo"; empty until decided
+
+[coverage]                              # minimum line coverage % per crate (cargo llvm-cov)
+fish-metadata = 95
+fish-pack = 90
+fish-abi = 90
+fish-api = 85
+fish-loader = 85
+fish-test-host = 80
+fish-launch = 85
+fish-installer = 85                     # lib core; src/gui/** excluded
+cargo-fish = 75
+exclude = ["xtask", "examples/*", "crates/fish-installer/src/gui/*", "crates/fish-render/src/gpu/*"]
