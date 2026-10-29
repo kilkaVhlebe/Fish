@@ -64,6 +64,11 @@ unsafe extern "C" fn get_service(
 ) -> FishStatus {
     // SAFETY: test strings are valid.
     let id = unsafe { s(id) };
+    if let Some(table) = crate::fake_client::lookup(id) {
+        // SAFETY: `out` is valid.
+        unsafe { *out = table };
+        return FishStatus::OK;
+    }
     if id != SERVICE_LOADER {
         return FishStatus::NOT_FOUND;
     }

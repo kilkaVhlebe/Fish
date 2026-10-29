@@ -1,0 +1,46 @@
+[package]
+name = "fish-installer"
+description = "Installs Fish next to the Horizon launcher: editions, wrapper, instance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "fish_installer"
+
+[[bin]]
+name = "fish-installer"
+path = "src/main.rs"
+
+[features]
+default = ["gui"]
+# The window shown when the installer starts without arguments.
+gui = ["dep:eframe", "dep:rfd", "dep:sys-locale"]
+# Bundle the fish-launch binary (path in FISH_LAUNCH_BIN at build time) into the installer.
+embed-launch = []
+
+[dependencies]
+clap = { version = "4.6.7", features = ["derive"] }
+eframe = { version = "0.37.0", optional = true }
+fish-launch = { path = "../fish-launch" }
+fish-pack = { path = "../fish-pack" }
+minisign-verify = "0.3.0"
+rfd = { version = "0.17.2", optional = true }
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sys-locale = { version = "0.3.2", optional = true }
+sysinfo = { version = "0.40.0", default-features = false, features = ["system"] }
+thiserror = "2.0.21"
+ureq = "3.5.0"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+fish-test-host = { path = "../fish-test-host" }
+minisign = "0.10.0"
+tempfile = "3.27.0"

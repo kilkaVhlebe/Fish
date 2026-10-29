@@ -5,6 +5,7 @@ mod docs;
 mod edition;
 mod horizon;
 mod lcov;
+mod pin;
 mod roadmap;
 
 use std::path::{Path, PathBuf};
@@ -38,6 +39,9 @@ enum Cmd {
     /// Manage horizon-mixins.
     #[command(subcommand)]
     Mixins(MixinsCmd),
+    /// Distribution artifacts.
+    #[command(subcommand)]
+    Dist(DistCmd),
     /// Build the Fish Edition of Horizon.
     #[command(subcommand)]
     Edition(EditionCmd),
@@ -59,12 +63,30 @@ enum Cmd {
 enum HorizonCmd {
     /// Download the pinned commit into .horizon/source/<commit>/.
     Fetch,
+    /// Pin fish.toml to the newest dated Nightly and rebuild the edition on it.
+    Pin {
+        /// Resolve the newest `nightly-YYYY-MM-DD` release (the only mode for now).
+        #[arg(long)]
+        latest_dated: bool,
+        /// Only report whether fish.toml is behind; change nothing.
+        #[arg(long)]
+        check: bool,
+        /// Update fish.toml but skip the rebuild.
+        #[arg(long)]
+        no_build: bool,
+    },
 }
 
 #[derive(Subcommand)]
 enum MixinsCmd {
     /// Install horizon-mixins at the pinned revision.
     Install,
+}
+
+#[derive(Subcommand)]
+enum DistCmd {
+    /// Build the single-file installer with `fish-launch` embedded.
+    Installer,
 }
 
 #[derive(Subcommand)]
@@ -216,6 +238,46 @@ fn load_config(root: &Path) -> Result<config::FishConfig> {
     config::parse(&std::fs::read_to_string(root.join("fish.toml")).context("reading fish.toml")?)
 }
 
+fn horizon_pin(root: &Path, latest_dated: bool, check: bool, no_build: bool) -> Result<()> {
+    if !latest_dated {
+        bail!("pass --latest-dated (pinning an explicit commit is done by editing fish.toml)");
+    }
+    let cfg = load_config(root)?;
+    let pin = pin::resolve_latest_dated()?;
+    if pin.commit == cfg.horizon_commit && pin.release_tag == cfg.horizon_release_tag {
+        eprintln!(
+            "fish.toml already pins {} ({})",
+            pin.release_tag, pin.commit
+        );
+        return Ok(());
+    }
+    eprintln!(
+        "newest dated Nightly: {} -> {} ({}); fish.toml pins {}",
+        pin.release_tag, pin.commit, pin.source_tag, cfg.horizon_commit
+    );
+    if check {
+        // Behind: exit code 1 so a workflow can open a pull request.
+        bail!("fish.toml is behind the newest dated Nightly");
+    }
+    let path = root.join("fish.toml");
+    let updated = pin::update_fish_toml(
+        &std::fs::read_to_string(&path)?,
+        &pin.commit,
+        &pin.source_tag,
+        &pin.release_tag,
+    )?;
+    std::fs::write(&path, updated)?;
+    if no_build {
+        return Ok(());
+    }
+    edition_cmd(
+        root,
+        EditionCmd::All {
+            profile: edition::Profile::Fast,
+        },
+    )
+}
+
 fn edition_cmd(root: &Path, cmd: EditionCmd) -> Result<()> {
     let cfg = load_config(root)?;
     match cmd {
@@ -243,6 +305,53 @@ fn edition_cmd(root: &Path, cmd: EditionCmd) -> Result<()> {
     }
 }
 
+/// Builds `fish-launch`, then an installer that carries it, and copies the installer to dist/.
+fn dist_installer(root: &Path) -> Result<()> {
+    run(
+        root,
+        "cargo",
+        &["build", "--release", "--locked", "-p", "fish-launch"],
+    )?;
+    let exe = if cfg!(windows) { ".exe" } else { "" };
+    let launch = root
+        .join("target/release")
+        .join(format!("fish-launch{exe}"));
+    if !launch.is_file() {
+        bail!("{} was not built", launch.display());
+    }
+    eprintln!("$ cargo build --release -p fish-installer --features embed-launch");
+    let status = Command::new("cargo")
+        .args([
+            "build",
+            "--release",
+            "--locked",
+            "-p",
+            "fish-installer",
+            "--features",
+            "embed-launch",
+        ])
+        .env("FISH_LAUNCH_BIN", &launch)
+        .current_dir(root)
+        .status()
+        .context("running cargo")?;
+    if !status.success() {
+        bail!("building the installer failed");
+    }
+    let built = root
+        .join("target/release")
+        .join(format!("fish-installer{exe}"));
+    let dist = root.join("dist");
+    std::fs::create_dir_all(&dist)?;
+    let out = dist.join(format!(
+        "fish-installer-{}-{}{exe}",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    ));
+    std::fs::copy(&built, &out).with_context(|| format!("copying {}", built.display()))?;
+    eprintln!("wrote {}", out.display());
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let root = root();
     match Cli::parse().cmd {
@@ -251,11 +360,17 @@ fn main() -> Result<()> {
         Cmd::Coverage => coverage(&root),
         Cmd::CheckConfig => check_config(&root),
         Cmd::Tick { ids } => tick(&root, &ids),
+        Cmd::Horizon(HorizonCmd::Pin {
+            latest_dated,
+            check,
+            no_build,
+        }) => horizon_pin(&root, latest_dated, check, no_build),
         Cmd::Horizon(HorizonCmd::Fetch) => horizon::fetch(&root, &load_config(&root)?).map(|_| ()),
         Cmd::Mixins(MixinsCmd::Install) => {
             horizon::mixins_install(&root, &load_config(&root)?).map(|_| ())
         }
         Cmd::Edition(cmd) => edition_cmd(&root, cmd),
+        Cmd::Dist(DistCmd::Installer) => dist_installer(&root),
         Cmd::E2e {
             resources,
             horizon_ctl,

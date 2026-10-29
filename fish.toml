@@ -26,4 +26,4 @@ fish-test-host = 80
 fish-launch = 85
 fish-installer = 85                     # lib core; src/gui/** excluded
 cargo-fish = 75
-exclude = ["xtask", "examples/*", "crates/fish-installer/src/gui/*", "crates/fish-render/src/gpu/*"]
+exclude = ["xtask", "examples/*", "crates/fish-installer/src/gui/view.rs", "crates/fish-test-tools/*", "crates/fish-render/src/gpu/*"]

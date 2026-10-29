@@ -180,3 +180,47 @@ fn killing_the_wrapper_kills_the_game() {
     });
     assert!(gone, "game process {pid} survived its wrapper");
 }
+
+#[test]
+fn main_with_reports_errors_and_info_in_process() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = install_edition(dir.path(), None);
+    let args = |v: &[&std::path::Path]| -> Vec<std::ffi::OsString> {
+        std::iter::once("fish-launch".into())
+            .chain(v.iter().map(|p| p.as_os_str().to_owned()))
+            .collect()
+    };
+    assert_eq!(
+        fish_launch::main_with(&args(&[]), &home),
+        0,
+        "no game: prints what is installed"
+    );
+    let unknown = vanilla(dir.path(), "nightly-2026-11-02-abcdef0");
+    assert_eq!(fish_launch::main_with(&args(&[&unknown]), &home), 2);
+    let elsewhere = dir.path().join("horizon-client.exe");
+    assert_eq!(fish_launch::main_with(&args(&[&elsewhere]), &home), 2);
+    let log = std::fs::read_to_string(home.join("logs/fish-launch.log")).unwrap();
+    assert!(
+        log.contains("Fish has no build for Horizon")
+            && log.contains("cannot tell which Horizon version"),
+        "{log}"
+    );
+}
+
+/// On Unix a successful start replaces the process (exec), which a test cannot survive.
+#[cfg(windows)]
+#[test]
+fn main_with_runs_the_game_in_process() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = install_edition(dir.path(), None);
+    let game = vanilla(dir.path(), "nightly-2026-10-28-6f8c7a0");
+    let args = vec![
+        std::ffi::OsString::from("fish-launch"),
+        game.into_os_string(),
+        "--name".into(),
+        "Dev".into(),
+    ];
+    assert_eq!(fish_launch::main_with(&args, &home), 0);
+    let log = std::fs::read_to_string(home.join("logs/fish-launch.log")).unwrap();
+    assert!(log.contains("the game exited with 0"), "{log}");
+}

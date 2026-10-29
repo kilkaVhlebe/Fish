@@ -53,13 +53,13 @@ file and in the Russian copy at the same time.
 ## P5 — Installer and launcher integration
 
 - [x] **P5.1** `fish-launch` wrapper
-- [ ] **P5.2** `fish-installer` core
-- [ ] **P5.3** Installer CLI
-- [ ] **P5.4** Installer GUI
-- [ ] **P5.5** `cargo fish run`
-- [ ] **P5.6** `xtask horizon pin`
-- [ ] **P5.7** Installer and wrapper tests
-- [ ] **P5.8** Player docs
+- [x] **P5.2** `fish-installer` core
+- [x] **P5.3** Installer CLI
+- [x] **P5.4** Installer GUI
+- [x] **P5.5** `cargo fish run`
+- [x] **P5.6** `xtask horizon pin`
+- [x] **P5.7** Installer and wrapper tests
+- [x] **P5.8** Player docs
 
 ## P6 — Events I: lifecycle, interaction, entity, message, command, crash, debug
 

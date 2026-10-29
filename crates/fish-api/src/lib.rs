@@ -48,3 +48,5 @@ pub fn __attach_for_tests(host: *const abi::FishHostV1) {
 
 #[cfg(test)]
 mod fake;
+#[cfg(test)]
+mod fake_client;

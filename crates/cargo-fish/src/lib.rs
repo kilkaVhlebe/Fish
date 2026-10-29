@@ -3,6 +3,7 @@
 pub mod build;
 pub mod check;
 pub mod new;
+pub mod rundev;
 pub mod testcmd;
 
 use std::ffi::OsString;
@@ -66,6 +67,21 @@ pub enum Cmd {
         /// Build with the release profile.
         #[arg(long)]
         release: bool,
+        /// Cargo target directory.
+        #[arg(long)]
+        target_dir: Option<PathBuf>,
+    },
+    /// Build the mod and start the Fish Edition with it (development mode).
+    Run {
+        /// Prepared game resources (default: the pinned launcher version's).
+        #[arg(long)]
+        resources: Option<PathBuf>,
+        /// An edition folder or binary (default: the newest installed).
+        #[arg(long)]
+        edition: Option<PathBuf>,
+        /// Offline player name.
+        #[arg(long, default_value = "Dev")]
+        name: String,
         /// Cargo target directory.
         #[arg(long)]
         target_dir: Option<PathBuf>,
@@ -168,6 +184,42 @@ pub fn run_with_exe(
             }
             let (_, failed) = testcmd::run_all(&built.path, &scripts, out)?;
             Ok(i32::from(failed > 0))
+        }
+        Cmd::Run {
+            resources,
+            edition,
+            name,
+            target_dir,
+        } => {
+            let built = build::build(
+                cwd,
+                &BuildOptions {
+                    release: false,
+                    target_platform: None,
+                    target_dir,
+                },
+            )?;
+            let home = fish_launch::fish_home();
+            let launcher_data = rundev::launcher_data_dir(|n| std::env::var_os(n));
+            let scratch = built.path.parent().unwrap_or(cwd).join("dev-home");
+            let plan = rundev::plan(
+                &rundev::RunOptions {
+                    resources,
+                    edition,
+                    name,
+                },
+                &built.path,
+                &home,
+                launcher_data.as_deref(),
+                &scratch,
+            )?;
+            writeln!(
+                out,
+                "Starting {} with {}",
+                plan.program.display(),
+                built.path.display()
+            )?;
+            rundev::execute(&plan)
         }
         Cmd::CheckChild { file } => {
             check::child(&file)?;

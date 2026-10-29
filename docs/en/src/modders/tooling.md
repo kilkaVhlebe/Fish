@@ -37,6 +37,14 @@ tool down. Prints the loaded mods, warnings and errors; exits non-zero if anythi
 
 Builds, then runs `tests/*.toml` scripts; see [Testing](testing.md).
 
+## `cargo fish run`
+
+Builds the mod, then starts the Fish Edition with it in development mode (`FISH_LOADER_ADD_MODS`, `FISH_LOADER_DEV=1`),
+offline, in a scratch game folder next to the build output (`dev-home`). Options: `--resources <dir>` (prepared game
+resources; default: the launcher's pinned Horizon version), `--edition <folder|binary>` (default: the newest installed
+edition), `--name <player>` (default `Dev`), `--target-dir`. It needs an installed edition (`fish-installer`) and
+resources prepared by a first Horizon launch.
+
 ## Running in a game
 
 Put the `.fish` into `<game dir>/fish-mods/`, or point `FISH_LOADER_ADD_MODS` at it. Environment variables:

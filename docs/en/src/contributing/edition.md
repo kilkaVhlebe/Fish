@@ -37,6 +37,13 @@ Change `[horizon]` in `fish.toml` (or run `cargo xtask horizon pin --latest-date
 horizon-mixins reports a vanished target, fix the bundle: `plan` names it. Hook points of the `native_*` family are
 only ever added by Horizon, so a newer commit normally just works.
 
+## Pinning and the installer
+
+`cargo xtask horizon pin --latest-dated [--check] [--no-build]` resolves the newest `nightly-YYYY-MM-DD` release, refuses
+a commit that is older than the pin or lacks `native_mods` hook points, rewrites `[horizon]` in `fish.toml` and rebuilds.
+`--check` only reports. `cargo xtask dist installer` builds `fish-launch`, then a single-file `fish-installer` that
+carries it (`--features embed-launch`, `FISH_LAUNCH_BIN`) into `dist/`.
+
 ## Note on the horizon-mixins revision
 
 The launcher at the pinned Horizon commit builds native mods with horizon-mixins `0500ff2`. Fish pins `0d6b103`, the next

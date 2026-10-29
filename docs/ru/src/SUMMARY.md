@@ -2,9 +2,13 @@
 
 - [Введение](introduction.md)
 - [Дорожная карта](roadmap.md)
+- [Установка Fish](players/install.md)
+- [Использование модов](players/mods.md)
+- [Решение проблем](players/troubleshooting.md)
 - [Архитектура](architecture/overview.md)
   - [ABI](architecture/abi.md)
   - [Fish Edition](architecture/edition.md)
+  - [Интеграция с лаунчером](architecture/launcher-integration.md)
 - [Участие в разработке](contributing/setup.md)
   - [Сборка изданий](contributing/edition.md)
 - [Манифест мода](modders/manifest.md)

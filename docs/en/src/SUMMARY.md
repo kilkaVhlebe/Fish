@@ -2,9 +2,13 @@
 
 - [Introduction](introduction.md)
 - [Roadmap](roadmap.md)
+- [Installing Fish](players/install.md)
+- [Using mods](players/mods.md)
+- [Troubleshooting](players/troubleshooting.md)
 - [Architecture](architecture/overview.md)
   - [ABI](architecture/abi.md)
   - [Fish Edition](architecture/edition.md)
+  - [Launcher integration](architecture/launcher-integration.md)
 - [Contributing](contributing/setup.md)
   - [Building editions](contributing/edition.md)
 - [Mod manifest](modders/manifest.md)

@@ -38,6 +38,13 @@ cargo xtask edition regressions                # собственные тест
 `edition all`. Если horizon-mixins сообщает об исчезнувшей цели, поправьте пакет: её называет `plan`. Точки хуков
 семейства `native_*` Horizon только добавляет, поэтому более новый коммит обычно работает сразу.
 
+## Закрепление и установщик
+
+`cargo xtask horizon pin --latest-dated [--check] [--no-build]` находит новейший релиз `nightly-YYYY-MM-DD`, отказывает,
+если коммит старее закреплённого или в нём нет точек `native_mods`, переписывает `[horizon]` в `fish.toml` и
+пересобирает. `--check` только сообщает. `cargo xtask dist installer` собирает `fish-launch`, затем однофайловый
+`fish-installer` с ним внутри (`--features embed-launch`, `FISH_LAUNCH_BIN`) в `dist/`.
+
 ## О ревизии horizon-mixins
 
 Лаунчер на закреплённом коммите Horizon собирает нативные моды через horizon-mixins `0500ff2`. Fish закрепляет `0d6b103` —

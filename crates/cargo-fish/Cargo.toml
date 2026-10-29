@@ -19,11 +19,13 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
+fish-launch = { path = "../fish-launch" }
 fish-loader = { path = "../fish-loader" }
+semver = "1"
+serde_json = "1"
 fish-metadata = { path = "../fish-metadata" }
 fish-pack = { path = "../fish-pack" }
 fish-test-host = { path = "../fish-test-host" }
-serde_json = "1"
 toml = "1"
 
 [dev-dependencies]
