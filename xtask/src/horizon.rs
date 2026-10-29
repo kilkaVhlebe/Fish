@@ -267,6 +267,47 @@ pub fn copy_tree(from: &Path, to: &Path) -> Result<usize> {
     Ok(n)
 }
 
+/// Applies `horizon/patches/*.patch` (sorted by name) to the staged source: `git apply --check`
+/// first, so a patch that stopped applying (after a re-pin) fails with its name.
+///
+/// The stage lives below the Fish repository, whose `git` would otherwise take over and silently
+/// skip every path outside its own tree: the ceiling variable hides the repository.
+pub fn apply_patches(root: &Path, src: &Path) -> Result<()> {
+    let dir = root.join("horizon/patches");
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    let mut patches: Vec<PathBuf> = fs::read_dir(&dir)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|e| e == "patch"))
+        .collect();
+    patches.sort();
+    let ceiling = src.parent().context("stage directory has no parent")?;
+    for patch in patches {
+        for check in [true, false] {
+            let mut cmd = Command::new("git");
+            cmd.current_dir(src)
+                .env("GIT_CEILING_DIRECTORIES", ceiling)
+                .args(["apply", "--whitespace=nowarn"]);
+            if check {
+                cmd.arg("--check");
+            }
+            let status = cmd
+                .arg(&patch)
+                .status()
+                .context("running `git apply` (is git installed?)")?;
+            if !status.success() {
+                bail!(
+                    "{} does not apply to this Horizon commit ({status})",
+                    patch.display()
+                );
+            }
+        }
+        eprintln!("applied {}", patch.display());
+    }
+    Ok(())
+}
+
 /// Builds `.horizon/work/<commit>/src` from the pristine source plus the edition crates.
 pub fn stage(root: &Path, cfg: &FishConfig) -> Result<PathBuf> {
     let commit = &cfg.horizon_commit;
@@ -281,6 +322,7 @@ pub fn stage(root: &Path, cfg: &FishConfig) -> Result<PathBuf> {
     }
     let files = copy_tree(&pristine, &src)?;
     eprintln!("staged {files} files of Horizon {commit}");
+    apply_patches(root, &src)?;
 
     let ws_text = fs::read_to_string(root.join("Cargo.toml"))?;
     for name in EDITION_CRATES {

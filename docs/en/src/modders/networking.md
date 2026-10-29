@@ -42,6 +42,8 @@ each side receives). Consequences:
 
 ## Status of the game side
 
-The loader side (types, receivers, limits, handshake, registry sync, connection events) is complete and tested over an
-in-memory network (`fish_test_host::net::Network`). **Wiring to Horizon's connections is not done yet**: the edition has
-no hooks for custom payloads, so payloads do not cross a real connection until it lands (roadmap P7.1, P7.2).
+The loader side is tested over an in-memory network (`fish_test_host::net::Network`). The edition wires it to Horizon's
+connections (client configuration and play, LAN guests, the integrated server's memory connection); the edition builds
+and passes its selftest and e2e. **Not yet verified in a real game:** a payload round trip, the handshake against a real
+peer, a LAN guest. Server play sends have up to one server tick (50 ms) of latency; `--in-frame` worlds have no
+connection and so no networking.

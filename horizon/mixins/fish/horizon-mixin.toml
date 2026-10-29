@@ -275,7 +275,7 @@ id = "guest-edges"
 target = "horizon_client::game::lan_actions::Game<'_>::tick_guests"
 kind = "HEAD"
 helper = "helpers/guest_edges.rs"
-bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "host", ty = "&LanHost", value = "&*host" } ]
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "host", ty = "&mut LanHost", value = "&mut *host" } ]
 
 [[injection]]
 id = "player-join"
@@ -389,3 +389,25 @@ target = "horizon_client::debug_overlay::Displayer::columns"
 kind = "RETURN"
 helper = "helpers/debug_lines.rs"
 bindings = [ { name = "columns", ty = "(Vec<String>, Vec<String>)", value = "$value" } ]
+
+[[injection]]
+id = "net-config-receive"
+target = "horizon_client::net::receive_brand"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/net_config_receive.rs"
+bindings = [ { name = "payload", ty = "&cfg::CustomPayload", value = "payload" } ]
+
+[[injection]]
+id = "net-joined"
+target = "horizon_client::game::extras::Game<'_>::extras_joined"
+kind = "HEAD"
+helper = "helpers/net_joined.rs"
+bindings = [  ]
+
+[[injection]]
+id = "net-left"
+target = "horizon_client::game::remote::Game<'_>::leave_server"
+kind = "HEAD"
+helper = "helpers/net_left.rs"
+bindings = [ { name = "game", ty = "&Game<'_>", value = "&*self" }, { name = "reason", ty = "&Option<String>", value = "&reason" } ]

@@ -131,6 +131,7 @@ pub(in crate::game) fn server_starting(game: &mut Game<'_>, world: &str) {
 
 pub(in crate::game) fn server_stopping(game: &mut Game<'_>) {
     horizon_client::fish_lib::mark_stopping();
+    super::net::server_stopping(game);
     horizon_client::fish_lib::refresh_crash_details();
     if let Some(d) = wanted(Kind::ServerStopping) {
         let e = base(game, Kind::ServerStopping);

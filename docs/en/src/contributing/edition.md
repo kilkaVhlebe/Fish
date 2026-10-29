@@ -48,3 +48,9 @@ carries it (`--features embed-launch`, `FISH_LAUNCH_BIN`) into `dist/`.
 
 The launcher at the pinned Horizon commit builds native mods with horizon-mixins `0500ff2`. Fish pins `0d6b103`, the next
 commit, which adds optional public visibility for support modules (needed once hooks live in other crates).
+
+## Patches
+
+Four hook sites for networking sit in functions that horizon-mixins rejects (opaque macros, `?` plus closures). They are
+unified diffs in `horizon/patches/0001..0004`, applied by `edition stage` (after a `git apply --check`). When Horizon
+moves, fix a failing patch by hand; each adds a call into `fish_bridge::net`.

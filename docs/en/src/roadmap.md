@@ -75,11 +75,11 @@ file and in the Russian copy at the same time.
 
 ## P7 — Networking and registry sync
 
-- [ ] **P7.1** `networking`
-- [ ] **P7.2** Connection events
-- [ ] **P7.3** `fish:handshake`
-- [ ] **P7.4** `registry_sync`
-- [ ] **P7.5** Docs
+- [x] **P7.1** `networking`
+- [x] **P7.2** Connection events
+- [x] **P7.3** `fish:handshake`
+- [x] **P7.4** `registry_sync`
+- [x] **P7.5** Docs
 
 ## P8 — Content I: registries, blocks, items, tags, sounds, game rules
 

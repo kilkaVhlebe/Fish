@@ -1,0 +1,18 @@
+Fish: custom payloads of players in the server's play phase (P7). `lan_guest_packet` has an opaque
+macro, so no horizon-mixins hook can sit inside it, and it drops `CustomPayload` (except the quiet
+commands channel) in its match. The new arm calls the bundle's `fish_bridge::net::server_play` (so
+this patch needs the bundle applied).
+
+diff --git a/crates/horizon-client/src/game/lan_actions.rs b/crates/horizon-client/src/game/lan_actions.rs
+index b3728f9..d22030e 100644
+--- a/crates/horizon-client/src/game/lan_actions.rs
++++ b/crates/horizon-client/src/game/lan_actions.rs
+@@ -1409,6 +1409,8 @@ impl Game<'_> {
+             S::CustomPayload(p) if p.channel == horizon_protocol::quiet::CHANNEL => {
+                 self.guest_quiet_commands(host, conn, &p.data)
+             }
++            // Fish: a custom payload of a mod.
++            S::CustomPayload(p) => super::fish_bridge::net::server_play(self, host, conn, &p),
+             S::ChatCommandSigned(p) => self.guest_signed_command(host, conn, p),
+             S::ChangeDifficulty(p) if host.hub.guests[gi].permission >= 2 => {
+                 if !self.level.difficulty_locked && (0..=3).contains(&p.difficulty) {

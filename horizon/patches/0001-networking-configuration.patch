@@ -1,0 +1,103 @@
+Fish: custom payloads in the server's configuration phase (P7).
+
+horizon-mixins can only hook function entries and whole-statement calls outside bodies with `?`
+or closures; `login_and_configure` reads the client's configuration packets in two loops that
+drop every custom payload (`_ => {}`) and has both. This patch hands those payloads to
+`fish_lib`, flushes what mods queued for a configuring player, and reports the start and end of
+configuration. It touches only `lan/conn.rs`; everything else is in the mixin bundle.
+
+diff --git a/crates/horizon-client/src/lan/conn.rs b/crates/horizon-client/src/lan/conn.rs
+index 0100b8f..cbda3f5 100644
+--- a/crates/horizon-client/src/lan/conn.rs
++++ b/crates/horizon-client/src/lan/conn.rs
+@@ -715,14 +715,17 @@ fn serve_login(
+     let result = login_and_configure(&mut c, shared, uuid, &hello.name, properties);
+     match result {
+         Ok(Some(parts)) => {
++            crate::fish_lib::server_config_end(&hello.name, uuid, true, "");
+             play(c, shared, parts, address);
+             Ok(())
+         }
+         Ok(None) => {
++            crate::fish_lib::server_config_end(&hello.name, uuid, false, "Disconnected");
+             shared.release(uuid);
+             Ok(())
+         }
+         Err(err) => {
++            crate::fish_lib::server_config_end(&hello.name, uuid, false, &err);
+             shared.release(uuid);
+             // ServerConfigurationPacketListenerImpl.onDisconnect.
+             let profile = format!("{} ({})", hello.name, uuid_string(uuid));
+@@ -740,6 +743,24 @@ struct Parts {
+     brand: String,
+ }
+ 
++/// Fish: writes what mods queued for a player in configuration. False when one of them
++/// disconnected the player.
++fn fish_flush(c: &mut Connection, queued: Vec<crate::fish_lib::ConfigOut>) -> Result<bool, String> {
++    for out in queued {
++        match out {
++            crate::fish_lib::ConfigOut::Payload(channel, data) => c
++                .send(&cfg::Clientbound::CustomPayload(cfg::CustomPayload { channel, data }).encode())
++                .map_err(|e| e.to_string())?,
++            crate::fish_lib::ConfigOut::Kick(reason) => {
++                let reason = crate::fish_lib::reason_tag(&reason);
++                let _ = c.send(&cfg::Clientbound::Disconnect(cfg::Disconnect { reason }).encode());
++                return Ok(false);
++            }
++        }
++    }
++    Ok(true)
++}
++
+ fn login_and_configure(
+     c: &mut Connection,
+     shared: &Arc<Shared>,
+@@ -776,6 +797,10 @@ fn login_and_configure(
+             _ => return Err("unexpected packet during login".into()),
+         }
+     }
++    // Fish: the player starts configuring; mods may send first.
++    if !fish_flush(c, crate::fish_lib::server_config_init(name, uuid))? {
++        return Ok(None);
++    }
+     // Configuration.
+     let sync: &SyncData = &shared.sync;
+     let send = |c: &mut Connection, p: cfg::Clientbound| c.send(&p.encode()).map_err(e);
+@@ -829,6 +854,13 @@ fn login_and_configure(
+                     .string(32767)
+                     .unwrap_or(brand);
+             }
++            // Fish: a custom payload of a mod.
++            cfg::Serverbound::CustomPayload(p) => {
++                let queued = crate::fish_lib::server_config_payload(name, uuid, &p.channel, &p.data);
++                if !fish_flush(c, queued)? {
++                    return Ok(None);
++                }
++            }
+             cfg::Serverbound::SelectKnownPacks(p) => break p.packs == vec![core.clone()],
+             _ => {}
+         }
+@@ -856,12 +888,22 @@ fn login_and_configure(
+         lost(shared, &format!("{name} ({})", uuid_string(uuid)), &text);
+         return Ok(None);
+     }
++    if !fish_flush(c, crate::fish_lib::server_config_drain(name))? {
++        return Ok(None);
++    }
+     send(c, cfg::Clientbound::FinishConfiguration(Empty))?;
+     loop {
+         let (id, payload) = c.recv().map_err(e)?;
+         match cfg::Serverbound::decode(id, &payload).map_err(e)? {
+             cfg::Serverbound::FinishConfiguration(_) => break,
+             cfg::Serverbound::ClientInformation(i) => info = i,
++            // Fish: a custom payload of a mod.
++            cfg::Serverbound::CustomPayload(p) => {
++                let queued = crate::fish_lib::server_config_payload(name, uuid, &p.channel, &p.data);
++                if !fish_flush(c, queued)? {
++                    return Ok(None);
++                }
++            }
+             _ => {}
+         }
+     }

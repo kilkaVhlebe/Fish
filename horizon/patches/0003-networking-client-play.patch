@@ -1,0 +1,17 @@
+Fish: custom payloads in the client's play phase (P7). `handle_packet` has an opaque macro, so no
+horizon-mixins hook can sit inside it, and it drops `CustomPayload` in its final `_ => {}`. The new
+arm calls the bundle's `fish_bridge::net::client_play` (so this patch needs the bundle applied).
+
+diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/src/game/remote.rs
+index 7c2422b..0089d5a 100644
+--- a/crates/horizon-client/src/game/remote.rs
++++ b/crates/horizon-client/src/game/remote.rs
+@@ -3026,6 +3026,8 @@ impl Game<'_> {
+                     self.titles.reset_times();
+                 }
+             }
++            // Fish: a custom payload of a mod (brand and quiet commands are handled before).
++            C::CustomPayload(p) => super::fish_bridge::net::client_play(self, &p),
+             _ => {}
+         }
+         Ok(())

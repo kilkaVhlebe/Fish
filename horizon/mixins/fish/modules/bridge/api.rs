@@ -8,6 +8,7 @@ use crate::game::Game;
 use crate::game::native_hooks::NativeMod;
 
 pub(in crate::game) fn tick_start(game: &mut Game<'_>) {
+    super::net::client_tick(game);
     super::events::note_context(game);
     super::events::note_actor(game);
     super::events::local_sleep_edge(game);

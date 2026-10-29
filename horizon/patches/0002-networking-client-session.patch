@@ -1,0 +1,20 @@
+Fish: the client's connection (P7). `Session::start` creates the writer and the thread that
+receives packets; this patch announces the connection (`NetClientInit`) and hands the writer to
+`fish_lib` before the thread starts, so that payloads can be sent from the first received packet on.
+horizon-mixins cannot do it from a hook: `start` returns `Self` (RETURN needs a concrete type), its
+locals are not reachable from HEAD, and it contains a closure.
+
+diff --git a/crates/horizon-client/src/net.rs b/crates/horizon-client/src/net.rs
+index b805895..d5e3d73 100644
+--- a/crates/horizon-client/src/net.rs
++++ b/crates/horizon-client/src/net.rs
+@@ -156,6 +156,9 @@ impl Session {
+             (writer.clone(), counters.clone(), cookies.clone());
+         let thread_configuring = configuring.clone();
+         let (address_owned, name_owned) = (address.to_owned(), name.to_owned());
++        // Fish: the connection events begin, and payloads can be written from here on.
++        crate::fish_lib::client_init();
++        crate::fish_lib::client_register(writer.clone(), configuring.clone());
+         let thread = std::thread::Builder::new()
+             .name("horizon-net".into())
+             .spawn(move || {
