@@ -64,14 +64,22 @@ unsafe extern "C" fn register(
     drop_user: Option<DropUserFn>,
 ) -> FishStatus {
     let id = text(id);
+    // Like the loader: the host owns `user` from here, a refusal drops it at once.
+    let refuse = |status: FishStatus| {
+        if let Some(f) = drop_user {
+            // SAFETY: the pointer came with this destructor and is dropped once.
+            unsafe { f(user) };
+        }
+        status
+    };
     if *crate::fake_rules::FROZEN.lock().unwrap() || id.starts_with("minecraft:") {
-        return FishStatus::INVALID_ARGUMENT;
+        return refuse(FishStatus::INVALID_ARGUMENT);
     }
     // SAFETY: the API passes a valid table whose strings live for the call.
     let s = unsafe { *settings };
     let mut blocks = BLOCKS.lock().unwrap();
     if blocks.iter().any(|b| b.id == id) {
-        return FishStatus::ALREADY_EXISTS;
+        return refuse(FishStatus::ALREADY_EXISTS);
     }
     blocks.push(Stored {
         id,
@@ -510,7 +518,7 @@ fn registering_after_the_freeze_says_so() {
 }
 
 #[test]
-fn a_refused_behaviour_is_dropped_by_the_api_and_an_accepted_one_by_the_host() {
+fn a_refused_behaviour_is_dropped_by_the_host_at_once_and_an_accepted_one_with_the_loader() {
     struct Count(Arc<AtomicUsize>);
     impl Drop for Count {
         fn drop(&mut self) {

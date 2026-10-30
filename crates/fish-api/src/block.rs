@@ -423,7 +423,8 @@ impl Blocks {
             )
         };
         // SAFETY: valid service table; the id and the settings outlive the call; ownership of
-        // `user` moves to the host, which calls `drop_behaviour` exactly once on success.
+        // `user` moves to the host on every outcome: it calls `drop_behaviour` exactly once, on a
+        // refusal at once and on success when the loader goes.
         let status = unsafe {
             (svc.register)(
                 host_ptr,
@@ -436,10 +437,6 @@ impl Blocks {
                 drop_user,
             )
         };
-        if !status.is_ok() && !user.is_null() {
-            // SAFETY: the host did not take ownership.
-            unsafe { drop_behaviour(user) };
-        }
         if status == FishStatus::INVALID_ARGUMENT && is_frozen()? {
             return Err(Error::InvalidArgument("registries are frozen".to_string()));
         }

@@ -1,4 +1,6 @@
 {
   "block.content_demo.ruby_block": "Block of Ruby",
-  "block.content_demo.raw_ruby": "Raw Ruby"
+  "block.content_demo.raw_ruby": "Raw Ruby",
+  "item.content_demo.ruby": "Ruby",
+  "item.content_demo.ruby_snack": "Ruby Snack"
 }

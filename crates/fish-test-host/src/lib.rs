@@ -10,6 +10,7 @@
 pub mod blocks;
 pub mod events;
 pub mod gamerules;
+pub mod items;
 pub mod net;
 pub mod script;
 pub mod sim;
@@ -118,6 +119,7 @@ impl TestHost {
         self.dispatch = Some(dispatch);
         self.loader = Some(loader);
         self.build_blocks();
+        self.build_creative();
         Ok(self)
     }
 

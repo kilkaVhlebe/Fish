@@ -447,3 +447,17 @@ target = "horizon_client::game::block_items::Game<'_>::apply_item_block_state"
 kind = "HEAD"
 helper = "helpers/block_place.rs"
 bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "pos", ty = "[i32; 3]", value = "pos" }, { name = "state", ty = "BlockStateId", value = "state" }, { name = "stack", ty = "&ItemStack", value = "stack" } ]
+
+[[injection]]
+id = "item-finish"
+target = "horizon_client::game::consume::Game<'_>::finish_consuming"
+kind = "HEAD"
+helper = "helpers/item_finish.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "stack", ty = "&ItemStack", value = "stack" } ]
+
+[[injection]]
+id = "item-tooltip"
+target = "horizon_client::game::stations::Game<'_>::stack_tooltip"
+kind = "RETURN"
+helper = "helpers/item_tooltip.rs"
+bindings = [ { name = "stack", ty = "&ItemStack", value = "stack" }, { name = "lines", ty = "Vec<(horizon_client::text::Text, u32)>", value = "$value" } ]

@@ -1,0 +1,12 @@
+schema = 1
+id = "item_edges"
+version = "0.1.0"
+name = "Item Edges"
+description = "Fish example mod: items that decide, refuse and panic, tick, show tooltips and fill creative tabs (used by the test host's tests)"
+license = "MIT"
+
+[library]
+name = "item_edges"
+
+[entrypoints]
+main = ["init"]

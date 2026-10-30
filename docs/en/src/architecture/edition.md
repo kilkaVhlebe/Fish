@@ -98,6 +98,11 @@ exact point, the event is **approximated**; the notes say how.
 | `broken` (blocks of Fish) | HEAD `Game::break_block_as_player`, then the tick's end | **approximated**: a break that no listener vetoed is noted, and `Broken` fires at the end of the tick when the block is gone (a refused break reports nothing) |
 | `neighbor_changed`, `random_tick`, `scheduled_tick` | **patch** `0007-block-ticks.patch` on horizon-world `Sim` | the block simulation reports them to `Dispatch::block_event`; they fire for any Fish block whose template runs them |
 | content overlay | **patch** `0006-content-mods.patch` on `game/mods.rs::content_root` | adds the Fish content folders (`<game dir>/.fish/content/<mod_id>/`) as always-on content mods; the loader writes them via `Dispatch::block_content` |
+| items of Fish: `use`, `use_on_block`, `use_on_entity` | extends the `Game::use_item` hook | after the block's own use, each hand in turn: the entity or block aimed at first (`Dispatch::item_event`), then the item's own `use`; `Handled` or `Cancel` ends the click |
+| `finish_using` (items of Fish) | HEAD `Game::finish_consuming` | consumables only, before the stack shrinks; the result is ignored |
+| `inventory_tick` (items of Fish) | extends the `tick_start` hook | every stack of Fish items in the inventory, armor and off hand of the local player, only when some item handles the event |
+| `append_tooltip` (items of Fish) | RETURN `Game::stack_tooltip` | the lines are added in gray after the vanilla ones; a crossbow's nested projectile (`stack_tooltip_lines`) is not covered |
+| creative tabs and entries | **patch** `0008-creative-inventory.patch` on `Creative::load` | `Dispatch::creative_inventory` rewrites the text of `creative-inventory.json` before it becomes tabs (once, when the resources load) |
 
 A derived event whose own listeners are missing still raises its base event when a derived listener exists (a mod that
 listens only to `modify_send` still gets called).

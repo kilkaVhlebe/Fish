@@ -286,6 +286,21 @@ pub fn debug_columns(mut columns: (Vec<String>, Vec<String>)) -> (Vec<String>, V
     columns
 }
 
+/// `Creative::load` (patch 0008): the creative inventory with the tabs and entries mods
+/// registered, or `None` when nothing changes.
+pub fn creative_patch(raw: &serde_json::Value) -> Option<serde_json::Value> {
+    let d = fish_hooks::get()?;
+    let text = serde_json::to_string(raw).ok()?;
+    let patched = d.creative_inventory(&text)?;
+    match serde_json::from_str(&patched) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            log::warn!("Fish: the patched creative inventory is not JSON, the original is used: {e}");
+            None
+        }
+    }
+}
+
 /// Puts what the loader reports into the crash report's details; returns the failed mods line.
 pub fn refresh_crash_details() -> String {
     let mut failed = String::new();

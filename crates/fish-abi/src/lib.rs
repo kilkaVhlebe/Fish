@@ -23,6 +23,7 @@ pub mod debug;
 pub mod game;
 pub mod gamerules;
 pub mod ident;
+pub mod items;
 pub mod networking;
 pub mod registry;
 pub mod services;

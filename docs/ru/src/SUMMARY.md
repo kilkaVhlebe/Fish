@@ -25,5 +25,7 @@
   - [Теги](modders/tags.md)
   - [Игровые правила](modders/game_rule.md)
   - [Блоки](modders/block.md)
+  - [Предметы](modders/item.md)
+  - [Группы предметов](modders/item_group.md)
 - [Инструменты](modders/tooling.md)
 - [Тестирование](modders/testing.md)

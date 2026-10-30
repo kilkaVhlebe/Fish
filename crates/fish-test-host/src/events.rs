@@ -3,10 +3,13 @@
 //! Each method raises the same [`GameEvent`]s, in the same order, as the bridge does in the
 //! edition, so a script exercises the mod's listeners exactly like the game would.
 
-use fish_hooks::{CommandOutcome, CommandSource, Dispatch, GameEvent, Kind, Outcome, Role};
+use fish_hooks::{
+    CommandOutcome, CommandSource, Dispatch, GameEvent, ItemEventKind, Kind, Outcome, Role,
+};
 use fish_loader::Side;
 
 use crate::TestHost;
+use crate::items::player_event;
 
 /// The default acting player of the simulation.
 pub const PLAYER: &str = "Steve";
@@ -72,7 +75,7 @@ impl TestHost {
         outcome
     }
 
-    fn at(kind: Kind) -> GameEvent<'static> {
+    pub(crate) fn at(kind: Kind) -> GameEvent<'static> {
         let mut e = GameEvent::new(kind);
         e.actor = PLAYER;
         e.actor_uuid = uuid_of(PLAYER);
@@ -237,14 +240,23 @@ impl TestHost {
             return predicted;
         }
         e.is_client = false;
-        self.game_event(&e)
-    }
-
-    /// The player uses `item` in the air.
-    pub fn use_item(&mut self, item: &str) -> Outcome {
-        let mut e = Self::at(Kind::UseItem);
-        e.item = item;
-        self.game_event(&e)
+        let outcome = self.game_event(&e);
+        if outcome != Outcome::Pass || !self.is_fish_item(item) {
+            return outcome;
+        }
+        // A Fish item gets the click the game's own flow left alone: on the block, then in general.
+        let mut ev = player_event(ItemEventKind::UseOnBlock, item, 1, hand);
+        ev.pos = pos;
+        ev.face = face;
+        ev.target = block;
+        let outcome = self.item_event(ev);
+        if outcome != Outcome::Pass {
+            return outcome;
+        }
+        let mut ev = player_event(ItemEventKind::Use, item, 1, hand);
+        ev.pos = pos;
+        ev.face = face;
+        self.item_event(ev)
     }
 
     /// The player attacks entity `id` of type `kind`.

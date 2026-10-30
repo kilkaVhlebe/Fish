@@ -12,7 +12,7 @@ use fish_abi::game::{EVENTS, GamePayload};
 use fish_abi::{ActionResult, COMBINE_FIRST_NON_PASS, COMBINE_NOTIFY, FishHandle, FishStr};
 use fish_hooks::{
     BlockDef, BlockEvent, BlockRun, ClientView, CommandOutcome, CommandSource, Dispatch, GameEvent,
-    GameRuleDef, HudView, Kind, NativeModRow, Outcome, Role, RuleValue,
+    GameRuleDef, HudView, ItemDef, ItemEvent, Kind, NativeModRow, Outcome, Role, RuleValue,
 };
 
 use crate::boot::Loader;
@@ -732,6 +732,30 @@ impl Dispatch for LoaderDispatch {
 
     fn block_event(&self, game: Option<&mut dyn ClientView>, event: &BlockEvent<'_>) -> Outcome {
         quiet(Outcome::Pass, || self.loader.inner.block_event(game, event))
+    }
+
+    fn items(&self, out: &mut Vec<ItemDef>) {
+        quiet((), || self.loader.inner.items_list(out));
+    }
+
+    fn item_events(&self) -> u32 {
+        quiet(0, || self.loader.inner.item_event_mask())
+    }
+
+    fn is_item(&self, item: &str) -> bool {
+        quiet(false, || self.loader.inner.item_known(item))
+    }
+
+    fn item_event(&self, game: Option<&mut dyn ClientView>, event: &ItemEvent<'_>) -> Outcome {
+        quiet(Outcome::Pass, || self.loader.inner.item_event(game, event))
+    }
+
+    fn item_tooltip(&self, item: &str, count: u32, lines: &mut Vec<String>) {
+        quiet((), || self.loader.inner.item_tooltip(item, count, lines));
+    }
+
+    fn creative_inventory(&self, json: &str) -> Option<String> {
+        quiet(None, || self.loader.inner.creative_inventory(json))
     }
 
     fn list_mods(&self, rows: &mut Vec<NativeModRow>) {

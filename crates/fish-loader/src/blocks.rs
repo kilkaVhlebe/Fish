@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use fish_abi::DropUserFn;
 use fish_abi::blocks::BlockHandlerFn;
-use fish_hooks::{BlockDef, BlockRun};
+use fish_hooks::{BlockDef, BlockRun, ItemDef};
 use fish_pack::FishArchive;
 use serde::Serialize;
 
@@ -104,6 +104,11 @@ impl BlockStore {
     /// The blocks in registration order.
     pub(crate) fn entries(&self) -> Vec<Arc<BlockEntry>> {
         self.blocks.clone()
+    }
+
+    /// True when a block `id` exists.
+    pub(crate) fn has_block(&self, id: &str) -> bool {
+        self.blocks.iter().any(|b| b.def.id == id)
     }
 
     /// True when `token` registered a block.
@@ -221,7 +226,7 @@ pub(crate) fn check_id(id: &str, mod_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn check_minecraft(what: &str, id: &str) -> Result<(), String> {
+pub(crate) fn check_minecraft(what: &str, id: &str) -> Result<(), String> {
     match id.strip_prefix("minecraft:") {
         Some(path) if path_chars_ok(path) => Ok(()),
         _ => Err(format!("the {what} {id:?} must be minecraft:<path>")),
@@ -328,7 +333,7 @@ fn toml_str(s: &str) -> String {
 /// The bytes of the `horizon-mod.toml` of a content mod.
 pub(crate) fn horizon_manifest(m: &ContentMod<'_>) -> Vec<u8> {
     let description = if m.description.is_empty() {
-        format!("Blocks of the Fish mod {}", m.name)
+        format!("Content of the Fish mod {}", m.name)
     } else {
         m.description.to_string()
     };
@@ -373,6 +378,7 @@ fn describe(names: &[String]) -> String {
 pub(crate) fn content_files(
     m: &ContentMod<'_>,
     defs: &[&BlockDef],
+    items: &[&ItemDef],
     archive: Option<&mut FishArchive>,
 ) -> (BTreeMap<String, Vec<u8>>, Vec<String>) {
     let mut files = BTreeMap::new();
@@ -386,6 +392,15 @@ pub(crate) fn content_files(
             .map_or(def.id.as_str(), |(_, path)| path);
         let name = format!("data/{}/horizon/block/{path}.json", m.id);
         files.insert(name.clone(), block_json(def));
+        generated.push(name);
+    }
+    for item in items {
+        let path = item
+            .id
+            .split_once(':')
+            .map_or(item.id.as_str(), |(_, path)| path);
+        let name = format!("data/{}/horizon/item/{path}.json", m.id);
+        files.insert(name.clone(), crate::items::item_json(item));
         generated.push(name);
     }
     let Some(archive) = archive else {
@@ -498,10 +513,11 @@ pub(crate) fn write_content(
     content_root: &Path,
     m: &ContentMod<'_>,
     defs: &[&BlockDef],
+    items: &[&ItemDef],
     archive: Option<&mut FishArchive>,
 ) -> Result<(PathBuf, Vec<String>), String> {
     let folder = content_root.join(m.id);
-    let (files, warnings) = content_files(m, defs, archive);
+    let (files, warnings) = content_files(m, defs, items, archive);
     let fail = |what: &str, e: io::Error| format!("could not {what} {}: {e}", folder.display());
     std::fs::create_dir_all(&folder).map_err(|e| fail("create", e))?;
     for (name, bytes) in &files {
@@ -744,7 +760,7 @@ mod tests {
         let text = String::from_utf8(horizon_manifest(&m)).unwrap();
         assert_eq!(
             text,
-            "id = \"ruby\"\nname = \"Ruby \\\"Mod\\\"\"\nversion = \"1.2.3\"\ndescription = \"Blocks of the Fish mod Ruby \\\"Mod\\\"\"\napi = \"0.2\"\nside = \"both\"\ncapabilities = [\"registries\"]\n"
+            "id = \"ruby\"\nname = \"Ruby \\\"Mod\\\"\"\nversion = \"1.2.3\"\ndescription = \"Content of the Fish mod Ruby \\\"Mod\\\"\"\napi = \"0.2\"\nside = \"both\"\ncapabilities = [\"registries\"]\n"
         );
         let m = ContentMod {
             description: "Gems\u{7f}",
@@ -818,7 +834,7 @@ mod tests {
         let blocks = [def("ruby:ruby_block"), def("ruby:deep/gem")];
         let defs: Vec<&BlockDef> = blocks.iter().collect();
         let root = tmp.path().join("content");
-        let (folder, warnings) = write_content(&root, &MOD, &defs, Some(&mut arc)).unwrap();
+        let (folder, warnings) = write_content(&root, &MOD, &defs, &[], Some(&mut arc)).unwrap();
         assert_eq!(folder, root.join("ruby"));
         assert_eq!(
             listing(&folder),
@@ -860,7 +876,7 @@ mod tests {
         let blocks = [def("ruby:x")];
         let defs: Vec<&BlockDef> = blocks.iter().collect();
         let root = tmp.path().join("content");
-        let (folder, _) = write_content(&root, &MOD, &defs, Some(&mut arc)).unwrap();
+        let (folder, _) = write_content(&root, &MOD, &defs, &[], Some(&mut arc)).unwrap();
         let a = folder.join("assets/ruby/a.txt");
         let stamp = std::fs::metadata(&a).unwrap().modified().unwrap();
 
@@ -873,7 +889,7 @@ mod tests {
         std::fs::write(folder.join("data/ruby/horizon/block/x.json/inner"), b"x").unwrap();
         std::thread::sleep(std::time::Duration::from_millis(30));
 
-        let (again, _) = write_content(&root, &MOD, &defs, Some(&mut arc)).unwrap();
+        let (again, _) = write_content(&root, &MOD, &defs, &[], Some(&mut arc)).unwrap();
         assert_eq!(again, folder);
         assert_eq!(std::fs::metadata(&a).unwrap().modified().unwrap(), stamp);
         assert_eq!(
@@ -891,7 +907,7 @@ mod tests {
         changed.light = Some(5);
         let json = folder.join("data/ruby/horizon/block/x.json");
         let before = std::fs::read(&json).unwrap();
-        write_content(&root, &MOD, &[&changed], Some(&mut arc)).unwrap();
+        write_content(&root, &MOD, &[&changed], &[], Some(&mut arc)).unwrap();
         assert_ne!(std::fs::read(&json).unwrap(), before);
         assert_eq!(std::fs::metadata(&a).unwrap().modified().unwrap(), stamp);
     }
@@ -901,7 +917,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let blocks = [def("ruby:x")];
         let defs: Vec<&BlockDef> = blocks.iter().collect();
-        let (folder, warnings) = write_content(tmp.path(), &MOD, &defs, None).unwrap();
+        let (folder, warnings) = write_content(tmp.path(), &MOD, &defs, &[], None).unwrap();
         assert!(warnings.is_empty());
         assert_eq!(
             listing(&folder),
@@ -914,7 +930,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let file = tmp.path().join("content");
         std::fs::write(&file, b"a file where the folder goes").unwrap();
-        let err = write_content(&file, &MOD, &[], None).unwrap_err();
+        let err = write_content(&file, &MOD, &[], &[], None).unwrap_err();
         assert!(err.contains("could not create"), "{err}");
     }
 

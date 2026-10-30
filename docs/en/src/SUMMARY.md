@@ -25,5 +25,7 @@
   - [Tags](modders/tags.md)
   - [Game rules](modders/game_rule.md)
   - [Blocks](modders/block.md)
+  - [Items](modders/item.md)
+  - [Item groups](modders/item_group.md)
 - [Tooling](modders/tooling.md)
 - [Testing](modders/testing.md)

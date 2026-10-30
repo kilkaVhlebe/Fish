@@ -18,6 +18,8 @@ pub mod command;
 pub mod event;
 pub mod game;
 pub mod game_rule;
+pub mod item;
+pub mod item_group;
 pub mod loader;
 pub mod networking;
 pub mod registry;
@@ -59,5 +61,7 @@ mod fake;
 mod fake_blocks;
 #[cfg(test)]
 mod fake_client;
+#[cfg(test)]
+mod fake_items;
 #[cfg(test)]
 mod fake_rules;

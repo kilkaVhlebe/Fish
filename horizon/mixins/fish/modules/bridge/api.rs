@@ -12,6 +12,7 @@ pub(in crate::game) fn tick_start(game: &mut Game<'_>) {
     super::net::client_tick(game);
     super::events::note_context(game);
     super::events::note_actor(game);
+    super::items::tick(game);
     super::events::local_sleep_edge(game);
     if let Some(d) = fish_hooks::get() {
         d.tick_start(&mut GameView { game });

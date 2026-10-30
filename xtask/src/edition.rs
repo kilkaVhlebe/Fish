@@ -661,6 +661,28 @@ fn content_demo_lines(log: &str, needles: &[&str]) -> Result<()> {
     Ok(())
 }
 
+/// Checks what the `content_demo` mod logged for its items (used on a block and in the air, the
+/// inventory tick, the eaten snack) and that the loader patched the creative inventory with the
+/// mod's tab and entry.
+pub fn verify_items_log(log: &str) -> Result<()> {
+    content_demo_lines(
+        log,
+        &["ruby used by", "ruby used on", "ruby is in the inventory"],
+    )?;
+    // Eating needs the game to let the e2e player eat (hunger or creative rules); a miss is
+    // reported, not fatal.
+    if !log.lines().any(|l| l.contains("ruby snack eaten by")) {
+        eprintln!("note: latest.log has no `ruby snack eaten by` line (the snack was not eaten)");
+    }
+    if !log
+        .lines()
+        .any(|l| l.contains("Fish creative inventory: 1 tab(s), 1 addition(s)"))
+    {
+        bail!("latest.log has no `Fish creative inventory: 1 tab(s), 1 addition(s)` line");
+    }
+    Ok(())
+}
+
 /// Checks what the `content_demo` mod logged during the e2e scenarios: the state ids Horizon gave
 /// its block, the late registration refusal, and the use, place and break of the ruby block.
 pub fn verify_blocks_log(log: &str) -> Result<()> {
@@ -943,6 +965,45 @@ pub fn e2e(
         ctl(horizon_ctl, &home, &["break", &east, &above, &z])?;
         ctl(horizon_ctl, &home, &["wait", "10"])?;
         ctl(horizon_ctl, &home, &["wait", "5"])?;
+        // Items of a mod: the ruby is used on the stone next to the ruby block, then in the air,
+        // and sits in the inventory meanwhile; the snack is eaten (a creative player may eat).
+        let (ruby_item, snack_item) = ("content_demo:ruby", "content_demo:ruby_snack");
+        ctl(
+            horizon_ctl,
+            &home,
+            &["command", &format!("give @s {ruby_item}")],
+        )?;
+        ctl(
+            horizon_ctl,
+            &home,
+            &["command", &format!("give @s {snack_item}")],
+        )?;
+        ctl(horizon_ctl, &home, &["wait", "10"])?;
+        ctl(horizon_ctl, &home, &["select", ruby_item])?;
+        ctl(horizon_ctl, &home, &["interact", &east, &y, &z, "up"])?;
+        ctl(horizon_ctl, &home, &["wait", "10"])?;
+        // Straight up: the crosshair hits nothing, so the use is the item's own.
+        ctl(horizon_ctl, &home, &["look", "0", "-90"])?;
+        ctl(horizon_ctl, &home, &["wait", "5"])?;
+        ctl(horizon_ctl, &home, &["use-item"])?;
+        ctl(horizon_ctl, &home, &["wait", "10"])?;
+        ctl(horizon_ctl, &home, &["select", snack_item])?;
+        ctl(horizon_ctl, &home, &["use-item", "--hold", "2"])?;
+        ctl(horizon_ctl, &home, &["wait", "20"])?;
+        // The creative screen with the mod's tab: best effort, the game's agent output does not
+        // have to name tabs, so only a hit is reported.
+        if ctl(horizon_ctl, &home, &["open-inventory"]).is_ok() {
+            ctl(horizon_ctl, &home, &["wait", "10"])?;
+            for what in ["screen", "ui"] {
+                if let Ok(seen) = ctl(horizon_ctl, &home, &[what])
+                    && seen.contains("Ruby")
+                {
+                    eprintln!("the creative screen ({what}) lists the Ruby tab");
+                }
+            }
+            let _ = ctl(horizon_ctl, &home, &["key", "esc", "tap"]);
+            ctl(horizon_ctl, &home, &["wait", "10"])?;
+        }
         // A data reload, then the F3 screen (it lists `events-demo is listening`) for the screenshot.
         ctl(horizon_ctl, &home, &["command", "reload"])?;
         ctl(horizon_ctl, &home, &["wait", "40"])?;
@@ -959,6 +1020,7 @@ pub fn e2e(
         verify_events_log(&log)?;
         verify_gamerule_log(&log)?;
         verify_blocks_log(&log)?;
+        verify_items_log(&log)?;
         if !shot.is_file() {
             bail!("no screenshot was written to {}", shot.display());
         }

@@ -54,6 +54,8 @@ pub struct Sim {
     pub block_dirs: Vec<PathBuf>,
     /// The outcome of the last `use_block` (`pass`, `handled`, `cancel`, `replace:<text>`).
     pub last_use: String,
+    /// The creative inventory (`creative-inventory.json` text) the loader built at boot.
+    pub creative_json: String,
 }
 
 impl Default for Sim {
@@ -78,6 +80,7 @@ impl Default for Sim {
             block_runs: Vec::new(),
             block_dirs: Vec::new(),
             last_use: String::new(),
+            creative_json: String::new(),
             world: Some("world".to_string()),
             player: Some(PlayerSnapshot {
                 x: 0.5,

@@ -64,3 +64,8 @@ so `game/mods.rs::content_root` also takes the folders the loader wrote under `<
 them as always-on content mods. `0007-block-ticks.patch` makes the block simulation of horizon-world (`Sim`) report
 neighbour updates, random ticks and scheduled ticks of blocks of Fish to `Dispatch::block_event`; the simulation keeps
 that state privately, so no hook can reach it.
+
+`0008-creative-inventory.patch` makes `Creative::load` pass the text of `creative-inventory.json` through
+`fish_lib::creative_patch` (`Dispatch::creative_inventory`) before it becomes tabs. A hook cannot do it:
+`Creative::from_json` returns `Result<Self>`, which horizon-mixins cannot cancel, and takes a reference that cannot be
+replaced.

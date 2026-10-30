@@ -66,3 +66,8 @@ cargo xtask edition regressions                # собственные тест
 всегда включёнными контент-модами. `0007-block-ticks.patch` заставляет симуляцию блоков horizon-world (`Sim`) сообщать
 об обновлениях соседей, случайных и запланированных тиках блоков Fish в `Dispatch::block_event`; это состояние
 симуляция держит приватно, хук до него не дотянется.
+
+`0008-creative-inventory.patch` заставляет `Creative::load` пропускать текст `creative-inventory.json` через
+`fish_lib::creative_patch` (`Dispatch::creative_inventory`), прежде чем он станет вкладками. Хук тут не справится:
+`Creative::from_json` возвращает `Result<Self>`, который horizon-mixins не умеет отменять, и принимает ссылку, которую
+нельзя подменить.

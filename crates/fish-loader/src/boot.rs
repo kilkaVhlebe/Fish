@@ -263,6 +263,14 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             fish_abi::blocks::SERVICE_BLOCK,
             std::ptr::from_ref(&crate::block_services::BLOCK) as usize,
         ),
+        (
+            fish_abi::items::SERVICE_ITEM,
+            std::ptr::from_ref(&crate::item_services::ITEM) as usize,
+        ),
+        (
+            fish_abi::items::SERVICE_ITEM_GROUP,
+            std::ptr::from_ref(&crate::item_services::ITEM_GROUP) as usize,
+        ),
     ] {
         inner.services.write().expect("services").insert(
             id.to_string(),

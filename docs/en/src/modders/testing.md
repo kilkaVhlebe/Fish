@@ -63,7 +63,10 @@ logs = ["refusing to break bedrock"]
 | --- | --- |
 | `game = true` / `false` | starts (server starting, first server tick, first frame) / stops the game |
 | `join = "Alex"`, `leave = "Alex"` | player joins or leaves |
-| `use_block = { pos, block, item }` | client prediction first, then the server's decision |
+| `use_block = { pos, block, item }` | client prediction first, then the server's decision; also decides item `use_on_block` |
+| `use_item = { item, hand }`, `use_entity = { id, type, item }` | an item is used in the air / on an entity (Fish item callbacks) |
+| `finish_using = { item }` | a consumable is finished (`on_finish_using`) |
+| `inventory_tick = { item, slot, selected }` | one inventory tick of a stack (`on_inventory_tick`) |
 | `attack_block = { pos, block }`, `attack_entity = { id, type }` | attacks |
 | `break_block = { pos, block }` | `block_break_before`; `after` fires on the next `server_ticks` |
 | `damage = { id, type, amount, source }`, `death = { id, type }` | entity events |
@@ -78,3 +81,7 @@ logs = ["refusing to break bedrock"]
 `expect` additionally knows `outcome`, `events`, `no_events`, `broadcast`, `sent_chat`, `received`, `broken`
 and `command_ok`. In Rust, `TestHost` has the same flows (`use_block`, `break_block`, `chat_in`, `server_command`, …) and
 `game_event(&GameEvent)` for anything else; `sim.events` is the event log.
+
+Item expectations: `items` (registered Fish items), `tooltips` (lines `append_tooltip` adds for an item),
+`creative_tabs` (Fish tabs present), `creative_entries` (items present in a tab) and `no_creative_entries` (items that
+must not be in a tab). See [items](item.md) and [item groups](item_group.md).

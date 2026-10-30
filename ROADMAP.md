@@ -13,7 +13,7 @@ the detailed per-item checklist is in [docs/en/src/roadmap.md](docs/en/src/roadm
 | P5 | **Installer**: One-click installer (window + CLI), launcher integration, `cargo fish run` | ✅ done |
 | P6 | **Events I**: Lifecycle, interaction, entities, chat, commands, F3, crash info | ✅ done |
 | P7 | **Networking**: Custom payloads, handshake, registry sync | ✅ done |
-| P8 | **Content**: Registries, blocks, tags and game rules done; items, sounds, particles not yet | 🚧 in progress |
+| P8 | **Content**: Registries, blocks, items, item groups, tags and game rules done; sounds, particles not yet | 🚧 in progress |
 | P9 | **Resources and data**: Resource packs, loot, recipes, biomes, dimensions, data generation | ⬜ planned |
 | P10 | **Rendering**: World/HUD rendering, shaders, models, particles, sound | ⬜ planned |
 | P11 | **UI and input**: Screens, config screens, key bindings, menus | ⬜ planned |
@@ -27,7 +27,7 @@ the detailed per-item checklist is in [docs/en/src/roadmap.md](docs/en/src/roadm
 
 - Players can install Fish, press Play on the "Fish" instance and put `.fish` mods into `fish-mods/`.
 - Mods can react to many game events, add commands, send network payloads and register registry entries.
-- Next: P8 blocks and items (needs content hooks inside Horizon).
+- Next: P8 sounds and particles, custom block state properties.
 
 ## Known gaps
 

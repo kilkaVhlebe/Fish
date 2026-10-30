@@ -86,8 +86,8 @@ file and in the Russian copy at the same time.
 - [x] **P8.1** `registry`
 - [x] **P8.2** Blocks
 - [ ] **P8.3** Custom state properties
-- [ ] **P8.4** Items
-- [ ] **P8.5** `item_group`
+- [x] **P8.4** Items
+- [x] **P8.5** `item_group`
 - [ ] **P8.6** `content` registries
 - [x] **P8.7** `tag` and convention tags
 - [ ] **P8.8** Sound events

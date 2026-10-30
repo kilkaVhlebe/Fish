@@ -63,7 +63,10 @@ logs = ["refusing to break bedrock"]
 | --- | --- |
 | `game = true` / `false` | запускает (запуск сервера, первый тик сервера, первый кадр) / останавливает игру |
 | `join = "Alex"`, `leave = "Alex"` | игрок входит или выходит |
-| `use_block = { pos, block, item }` | сначала предсказание клиента, потом решение сервера |
+| `use_block = { pos, block, item }` | сначала предсказание клиента, потом решение сервера; также решает `use_on_block` предмета |
+| `use_item = { item, hand }`, `use_entity = { id, type, item }` | предмет используется в воздухе / на сущности (вызовы предметов Fish) |
+| `finish_using = { item }` | съедобное доедено (`on_finish_using`) |
+| `inventory_tick = { item, slot, selected }` | один тик инвентаря для стопки (`on_inventory_tick`) |
 | `attack_block = { pos, block }`, `attack_entity = { id, type }` | атаки |
 | `break_block = { pos, block }` | `block_break_before`; `after` приходит на следующем `server_ticks` |
 | `damage = { id, type, amount, source }`, `death = { id, type }` | события сущностей |
@@ -78,3 +81,8 @@ logs = ["refusing to break bedrock"]
 `expect` дополнительно знает `outcome`, `events`, `no_events`, `broadcast`, `sent_chat`, `received`, `broken` и
 `command_ok`. В Rust у `TestHost` те же сценарии (`use_block`, `break_block`, `chat_in`, `server_command`, …) и
 `game_event(&GameEvent)` для всего остального; `sim.events` — журнал событий.
+
+Ожидания для предметов: `items` (зарегистрированные предметы Fish), `tooltips` (строки, которые `append_tooltip`
+добавляет предмету), `creative_tabs` (имеющиеся вкладки Fish), `creative_entries` (предметы, присутствующие во вкладке)
+и `no_creative_entries` (предметы, которых во вкладке быть не должно). См. [предметы](item.md) и
+[группы предметов](item_group.md).

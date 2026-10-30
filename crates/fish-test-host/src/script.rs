@@ -36,6 +36,24 @@
 //! use_result = "success"                             # success, consume, fail or pass
 //! content_files = ["data/mymod/horizon/block/ruby.json"]
 //! ```
+//!
+//! Fish items are used, eaten, ticked and listed in the creative inventory the loader builds from a
+//! small vanilla fixture (tabs `building_blocks`, `ingredients`, `search`, `hotbar`, `op_blocks`):
+//!
+//! ```toml
+//! [[step]]
+//! use_item = { item = "mymod:ruby", count = 1, hand = "main" }    # count and hand are optional
+//! use_entity = { id = 7, entity = "minecraft:cow", item = "mymod:ruby", hand = "main" }
+//! finish_using = { item = "mymod:snack", count = 1, hand = "main" }
+//! inventory_tick = { item = "mymod:ruby", count = 1, slot = 0, selected = false }
+//! [step.expect]
+//! items = ["mymod:ruby"]                                           # registered items
+//! tooltips = { "mymod:ruby" = ["§7A gem"] }                        # exact lines for a stack of one
+//! creative_tabs = ["mymod:tab", "minecraft:ingredients"]           # tabs of the creative inventory
+//! creative_entries = { "mymod:tab" = ["mymod:ruby"] }              # contained, in this order
+//! no_creative_entries = { "minecraft:ingredients" = ["mymod:x"] }  # must not be listed
+//! use_result = "success"                                           # of the last use_* step
+//! ```
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -115,6 +133,21 @@ pub struct Expect {
     /// Files that must not exist in any content folder.
     #[serde(default)]
     pub no_content_files: Vec<String>,
+    /// Items that must be registered (`namespace:path`).
+    #[serde(default)]
+    pub items: Vec<String>,
+    /// The tooltip lines an item adds for a stack of one, exactly: `"mod:item" = ["line", ...]`.
+    #[serde(default)]
+    pub tooltips: BTreeMap<String, Vec<String>>,
+    /// Tabs that must exist in the creative inventory, Fish's and vanilla's.
+    #[serde(default)]
+    pub creative_tabs: Vec<String>,
+    /// Items a creative tab must list, in this relative order: `"tab:id" = ["item", ...]`.
+    #[serde(default)]
+    pub creative_entries: BTreeMap<String, Vec<String>>,
+    /// Items a creative tab must not list.
+    #[serde(default)]
+    pub no_creative_entries: BTreeMap<String, Vec<String>>,
 }
 
 fn stone() -> String {
@@ -164,6 +197,76 @@ pub struct UseStep {
     pub face: Option<String>,
     /// The hand: `main` (default) or `off`.
     pub hand: Option<String>,
+}
+
+/// The player uses an item in the air.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UseItemStep {
+    /// The item's id.
+    pub item: String,
+    /// The size of the stack (default 1).
+    #[serde(default = "one_u32")]
+    pub count: u32,
+    /// The hand: `main` (default) or `off`.
+    pub hand: Option<String>,
+}
+
+/// The player uses an item on an entity.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UseEntityStep {
+    /// The entity's network id (default 1).
+    #[serde(default = "one")]
+    pub id: i64,
+    /// The entity's type (default `minecraft:zombie`).
+    #[serde(default = "zombie")]
+    pub entity: String,
+    /// The held item (empty: nothing).
+    #[serde(default)]
+    pub item: String,
+    /// The hand: `main` (default) or `off`.
+    pub hand: Option<String>,
+}
+
+/// The player finished eating or drinking an item.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FinishUsingStep {
+    /// The item's id.
+    pub item: String,
+    /// The size of the stack (default 1).
+    #[serde(default = "one_u32")]
+    pub count: u32,
+    /// The hand: `main` (default) or `off`.
+    pub hand: Option<String>,
+}
+
+/// An item sitting in the player's inventory for one tick.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InventoryTickStep {
+    /// The item's id.
+    pub item: String,
+    /// The size of the stack (default 1).
+    #[serde(default = "one_u32")]
+    pub count: u32,
+    /// The inventory slot: 0..=35 the inventory, then armor and off hand (default 0).
+    #[serde(default)]
+    pub slot: i32,
+    /// Whether it is the selected hotbar slot (default false).
+    #[serde(default)]
+    pub selected: bool,
+}
+
+fn one_u32() -> u32 {
+    1
+}
+
+/// The hand number of a step's `hand` key; a name that is no hand is a mistake in the script.
+fn hand_of(step: &str, name: Option<&str>) -> u8 {
+    name.map_or(Some(0), blocks::hand_number)
+        .unwrap_or_else(|| panic!("{step}: unknown hand {name:?}"))
 }
 
 /// A block the player places in the simulated world.
@@ -329,6 +432,14 @@ pub struct Step {
     pub leave: Option<String>,
     /// The player uses an item on a block.
     pub use_block: Option<UseStep>,
+    /// The player uses an item in the air.
+    pub use_item: Option<UseItemStep>,
+    /// The player uses an item on an entity.
+    pub use_entity: Option<UseEntityStep>,
+    /// The player finished eating or drinking an item.
+    pub finish_using: Option<FinishUsingStep>,
+    /// One tick of an item in the player's inventory.
+    pub inventory_tick: Option<InventoryTickStep>,
     /// The player attacks a block.
     pub attack_block: Option<BlockStep>,
     /// The player attacks an entity.
@@ -450,6 +561,24 @@ fn game_actions(host: &mut TestHost, step: &Step) {
             panic!("use_block: unknown face {:?} or hand {:?}", b.face, b.hand);
         };
         host.use_block_at(b.pos, face, hand, &b.block, item);
+    }
+    if let Some(i) = &step.use_item {
+        host.use_item(&i.item, i.count, hand_of("use_item", i.hand.as_deref()));
+    }
+    if let Some(e) = &step.use_entity {
+        let hand = hand_of("use_entity", e.hand.as_deref());
+        let item = if e.item.is_empty() {
+            "minecraft:air"
+        } else {
+            &e.item
+        };
+        host.use_item_on_entity(e.id, &e.entity, item, hand);
+    }
+    if let Some(i) = &step.finish_using {
+        host.finish_using(&i.item, i.count, hand_of("finish_using", i.hand.as_deref()));
+    }
+    if let Some(i) = &step.inventory_tick {
+        host.inventory_tick(&i.item, i.count, i.slot, i.selected);
     }
     if let Some(b) = &step.attack_block {
         host.attack_block(b.pos, &b.block);
@@ -681,6 +810,9 @@ pub fn run(host: &mut TestHost, script: &Script) -> Result<(), ScriptFailure> {
             });
         }
         if let Some(failure) = host.check_blocks(n, expect) {
+            return Err(failure);
+        }
+        if let Some(failure) = host.check_items(n, expect) {
             return Err(failure);
         }
         for (name, want) in &expect.gamerules {

@@ -1,0 +1,25 @@
+Fish: creative tabs and entries of mods (P8.5).
+
+`Creative::load` reads `creative-inventory.json` once while the game loads its resources. The
+tabs mods register and the entries they add to tabs go into that document before it is turned
+into tabs, so they take the same path as the vanilla ones (stacks, search tab, icons).
+`fish_lib::creative_patch` asks the loader (`Dispatch::creative_inventory`); the target is a
+patch and not a hook because `from_json` returns `Result<Self>`, which horizon-mixins cannot
+cancel, and its argument is a reference that cannot be replaced.
+
+diff --git a/crates/horizon-client/src/creative.rs b/crates/horizon-client/src/creative.rs
+index 0922073..2c9d28c 100644
+--- a/crates/horizon-client/src/creative.rs
++++ b/crates/horizon-client/src/creative.rs
+@@ -190,7 +190,10 @@ impl Creative {
+     pub fn load(root: &Path) -> Result<Self> {
+         let path = root.join("creative-inventory.json");
+         if path.exists() {
+-            Self::from_json(&serde_json::from_slice(&fs::read(path)?)?)
++            let raw: Value = serde_json::from_slice(&fs::read(path)?)?;
++            // Fish: the tabs and entries of the mods registered.
++            let raw = crate::fish_lib::creative_patch(&raw).unwrap_or(raw);
++            Self::from_json(&raw)
+         } else {
+             Self::from_legacy(&serde_json::from_slice(&fs::read(
+                 root.join("creative-tabs.json"),

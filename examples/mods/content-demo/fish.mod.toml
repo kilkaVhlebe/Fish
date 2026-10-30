@@ -2,7 +2,7 @@ schema = 1
 id = "content_demo"
 version = "0.1.0"
 name = "Content Demo"
-description = "Fish example mod: blocks"
+description = "Fish example mod: blocks, items and a creative tab"
 license = "MIT"
 
 [library]

@@ -10,7 +10,7 @@ use fish_abi::blocks::{
     BlockHandlerFn, BlockPayloadV1, BlockServiceV1, BlockSettingsV1, HANDLER_PANICKED, event, set,
 };
 use fish_abi::{ActionResult, DropUserFn, FishHandle, FishServiceHeader, FishStatus, FishStr};
-use fish_hooks::{BlockDef, BlockEvent, BlockEventKind, BlockRun, ClientView, Outcome};
+use fish_hooks::{BlockDef, BlockEvent, BlockEventKind, BlockRun, ClientView, ItemDef, Outcome};
 use fish_metadata::Origin;
 use fish_pack::FishArchive;
 
@@ -134,6 +134,18 @@ unsafe extern "C" fn register(
                 return FishStatus::INVALID_ARGUMENT;
             }
         };
+        // A block has an item of its own: Horizon refuses an item and a block under one id.
+        if inner
+            .items
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .has(id)
+        {
+            inner.warn(format!(
+                "{who} registered the block {id}, which is also an item (a block has an item of its own)"
+            ));
+            return FishStatus::ALREADY_EXISTS;
+        }
         let added = inner
             .blocks
             .lock()
@@ -193,7 +205,7 @@ unsafe extern "C" fn state_range(
 }
 
 /// The no-game handle of an event raised without a game.
-const NO_GAME: FishHandle = FishHandle {
+pub(crate) const NO_GAME: FishHandle = FishHandle {
     index: u32::MAX,
     generation: 0,
 };
@@ -218,24 +230,46 @@ impl Inner {
         self.record(token).is_some_and(|r| r.is_failed())
     }
 
-    /// Writes the content mod of every mod that did not fail and registered blocks, and returns the
-    /// folders.
+    /// Writes the content mod of every mod that did not fail and registered blocks or items, and
+    /// returns the folders.
     pub(crate) fn blocks_content(&self) -> Vec<PathBuf> {
         let entries = self
             .blocks
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .entries();
-        let mut groups: Vec<(u64, Vec<&BlockDef>)> = Vec::new();
+        let item_entries = self
+            .items
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entries();
+        let mut groups: Vec<(u64, Vec<&BlockDef>, Vec<&ItemDef>)> = Vec::new();
+        let mut slot = |owner: u64| -> usize {
+            groups
+                .iter()
+                .position(|(o, _, _)| *o == owner)
+                .unwrap_or_else(|| {
+                    groups.push((owner, Vec::new(), Vec::new()));
+                    groups.len() - 1
+                })
+        };
+        let mut blocks = Vec::new();
         for e in entries.iter().filter(|e| !self.owner_failed(e.owner)) {
-            match groups.iter_mut().find(|(owner, _)| *owner == e.owner) {
-                Some((_, defs)) => defs.push(&e.def),
-                None => groups.push((e.owner, vec![&e.def])),
-            }
+            blocks.push((slot(e.owner), &e.def));
+        }
+        let mut items = Vec::new();
+        for e in item_entries.iter().filter(|e| !self.owner_failed(e.owner)) {
+            items.push((slot(e.owner), &e.def));
+        }
+        for (i, def) in blocks {
+            groups[i].1.push(def);
+        }
+        for (i, def) in items {
+            groups[i].2.push(def);
         }
         let root = Path::new(&self.game_dir).join(".fish").join("content");
         let (mut folders, mut warnings) = (Vec::new(), Vec::new());
-        for (owner, defs) in groups {
+        for (owner, defs, items) in groups {
             let Some(rec) = self.record(owner) else {
                 continue;
             };
@@ -249,18 +283,19 @@ impl Inner {
             let archive = store.archive_mut(owner);
             if archive.is_none() {
                 warnings.push(format!(
-                    "the archive of {} is not available: its assets are not copied for its blocks",
+                    "the archive of {} is not available: its assets are not copied for its blocks and items",
                     m.name
                 ));
             }
-            match write_content(&root, &m, &defs, archive) {
+            match write_content(&root, &m, &defs, &items, archive) {
                 Ok((folder, mut w)) => {
                     folders.push(folder);
                     warnings.append(&mut w);
                 }
-                Err(why) => {
-                    warnings.push(format!("the blocks of {} were not added: {why}", m.name))
-                }
+                Err(why) => warnings.push(format!(
+                    "the blocks and items of {} were not added: {why}",
+                    m.name
+                )),
             }
         }
         for w in warnings {
@@ -272,8 +307,9 @@ impl Inner {
     /// Keeps the archives of the mods that registered blocks (their assets are copied later).
     pub(crate) fn keep_block_archives(&self, archives: &mut HashMap<Origin, FishArchive>) {
         let mut store = self.blocks.lock().unwrap_or_else(|e| e.into_inner());
+        let items = self.items.lock().unwrap_or_else(|e| e.into_inner());
         for rec in self.records() {
-            if store.has_blocks_of(rec.token)
+            if (store.has_blocks_of(rec.token) || items.has_items_of(rec.token))
                 && let Some(archive) = archives.remove(&rec.origin)
             {
                 store.keep_archive(rec.token, archive);
@@ -1256,7 +1292,10 @@ mod tests {
         std::fs::create_dir_all(dir.path().join(".fish")).unwrap();
         std::fs::write(dir.path().join(".fish").join("content"), b"a file").unwrap();
         assert!(loader.inner.blocks_content().is_empty());
-        assert!(warned(&loader, "the blocks of Gem were not added"));
+        assert!(warned(
+            &loader,
+            "the blocks and items of Gem were not added"
+        ));
     }
 
     #[test]

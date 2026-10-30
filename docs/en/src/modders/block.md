@@ -42,7 +42,8 @@ fn init() -> Result<(), fish_api::Error> {
 - **Ids** are `namespace:path`; the namespace must be the id of the registering mod (`minecraft:` is refused), the path
   uses `a-z`, `0-9`, `_`, `.`, `/` and `-`. A block registered twice fails with `ALREADY_EXISTS`.
 - **Registration** is allowed while `pre_launch` or `main` runs, the same freeze as [registries](registry.md).
-- **A block item** with the same id always exists; its model, texture and name come from the files below.
+- **A block item** with the same id always exists; its model, texture and name come from the files below. Do not
+  register an item with that id ([items](item.md)).
 - **Everything else comes from the template**: its collision shape, whether it ticks randomly, its state properties.
   `.random_ticks()` and `.no_collision()` do not exist because Horizon's content declarations cannot express them:
   choose a template that already has the behaviour. Custom state properties are not available yet (P8.3).

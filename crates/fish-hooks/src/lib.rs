@@ -269,6 +269,150 @@ impl<'a> BlockEvent<'a> {
     }
 }
 
+/// An item a mod registered (`fish:item`): a vanilla template and what differs from it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ItemDef {
+    /// The item's id, `namespace:path`; the namespace is the registering mod's id.
+    pub id: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+    /// The vanilla item it copies: its components.
+    pub template: String,
+    /// The largest stack (1 to 99).
+    pub max_stack: Option<u8>,
+    /// The rarity: `common`, `uncommon`, `rare` or `epic`.
+    pub rarity: Option<String>,
+    /// The events its mod handles: bit `1 << n` for the `n`th [`ItemEventKind`].
+    pub events: u32,
+}
+
+/// What happened to a Fish item, for [`Dispatch::item_event`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ItemEventKind {
+    /// The item was used (in the air, or a click the block and the entity left to it).
+    Use,
+    /// The item was used on a block.
+    UseOnBlock,
+    /// The item was used on an entity.
+    UseOnEntity,
+    /// The player finished eating or drinking the item.
+    FinishUsing,
+    /// The item sits in the player's inventory (every tick).
+    InventoryTick,
+    /// A tooltip of the item is built.
+    AppendTooltip,
+}
+
+impl ItemEventKind {
+    /// Every kind, in the order of the `fish:item` event numbers.
+    pub const ALL: [ItemEventKind; 6] = [
+        ItemEventKind::Use,
+        ItemEventKind::UseOnBlock,
+        ItemEventKind::UseOnEntity,
+        ItemEventKind::FinishUsing,
+        ItemEventKind::InventoryTick,
+        ItemEventKind::AppendTooltip,
+    ];
+
+    /// The event's bit in an item's `events` mask.
+    pub fn bit(self) -> u32 {
+        1 << (self as u8)
+    }
+
+    /// The event's name (`use`, `use_on_block`).
+    pub fn name(self) -> &'static str {
+        match self {
+            ItemEventKind::Use => "use",
+            ItemEventKind::UseOnBlock => "use_on_block",
+            ItemEventKind::UseOnEntity => "use_on_entity",
+            ItemEventKind::FinishUsing => "finish_using",
+            ItemEventKind::InventoryTick => "inventory_tick",
+            ItemEventKind::AppendTooltip => "append_tooltip",
+        }
+    }
+}
+
+/// An event of an item stack, found by the item's id.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ItemEvent<'a> {
+    /// What happened.
+    pub kind: ItemEventKind,
+    /// The item's id.
+    pub item: &'a str,
+    /// How many items the stack holds.
+    pub count: u32,
+    /// The hand used: 0 main, 1 off.
+    pub hand: u8,
+    /// The face clicked, `0..=5` (down, up, north, south, west, east), or 255.
+    pub face: u8,
+    /// The inventory slot (`fish_abi::items::slot`), or `-1`.
+    pub slot: i32,
+    /// True when the stack is in the selected hotbar slot or the off hand.
+    pub selected: bool,
+    /// The block clicked (use on a block).
+    pub pos: [i32; 3],
+    /// The block's id (use on a block) or the entity's type (use on an entity).
+    pub target: &'a str,
+    /// The entity's network id (use on an entity).
+    pub entity_id: i64,
+    /// Which game raised it.
+    pub role: Role,
+    /// The acting player's name, empty when there is none.
+    pub actor: &'a str,
+    /// The acting player's UUID bytes.
+    pub actor_uuid: [u8; 16],
+    /// The dimension id.
+    pub dimension: &'a str,
+}
+
+impl<'a> ItemEvent<'a> {
+    /// An event of `kind` for a stack of `count` of `item`, with the rest left empty.
+    pub fn new(kind: ItemEventKind, item: &'a str, count: u32) -> ItemEvent<'a> {
+        ItemEvent {
+            kind,
+            item,
+            count,
+            hand: 0,
+            face: 255,
+            slot: -1,
+            selected: false,
+            pos: [0; 3],
+            target: "",
+            entity_id: 0,
+            role: Role::Window,
+            actor: "",
+            actor_uuid: [0; 16],
+            dimension: "minecraft:overworld",
+        }
+    }
+}
+
+/// A creative tab a mod registered (`fish:item_group`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ItemGroupDef {
+    /// The tab's id, `namespace:path`.
+    pub id: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+    /// The text on the tab (empty: made from the id).
+    pub title: String,
+    /// The item shown on the tab.
+    pub icon: String,
+    /// The items it lists, in order.
+    pub entries: Vec<String>,
+}
+
+/// Items a mod adds to a tab (`fish:item_group` `modify_entries`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ItemGroupAddition {
+    /// The tab's id: a vanilla one or a mod's.
+    pub group: String,
+    /// The id of the mod that adds the items.
+    pub mod_id: String,
+    /// The items, in order.
+    pub entries: Vec<String>,
+}
+
 /// The type of a Fish game rule, with its bounds.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuleKind {
@@ -865,6 +1009,30 @@ pub trait Dispatch: Send + Sync {
     /// [`Outcome::Handled`] or [`Outcome::Cancel`] end the click.
     fn block_event(&self, _game: Option<&mut dyn ClientView>, _event: &BlockEvent<'_>) -> Outcome {
         Outcome::Pass
+    }
+    /// The items mods registered, in registration order.
+    fn items(&self, _out: &mut Vec<ItemDef>) {}
+    /// The union of the events (`1 << ItemEventKind`) any live Fish item handles: hot paths
+    /// that raise item events for every stack ask first.
+    fn item_events(&self) -> u32 {
+        0
+    }
+    /// True when `item` is an item a mod registered (cheap).
+    fn is_item(&self, _item: &str) -> bool {
+        false
+    }
+    /// An event of the Fish item `event.item`. The events that use an item (`Use`,
+    /// `UseOnBlock`, `UseOnEntity`) decide: [`Outcome::Handled`] or [`Outcome::Cancel`] end the click.
+    fn item_event(&self, _game: Option<&mut dyn ClientView>, _event: &ItemEvent<'_>) -> Outcome {
+        Outcome::Pass
+    }
+    /// Appends the tooltip lines the mod of `item` adds for a stack of `count` (client only).
+    fn item_tooltip(&self, _item: &str, _count: u32, _lines: &mut Vec<String>) {}
+    /// The game's creative inventory (`creative-inventory.json`) with the tabs and entries Fish
+    /// mods registered applied, or `None` when nothing changes. Called once while the game loads
+    /// its resources.
+    fn creative_inventory(&self, _json: &str) -> Option<String> {
+        None
     }
 }
 

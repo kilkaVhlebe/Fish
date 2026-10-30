@@ -1,0 +1,75 @@
+name = "items: registration, content folder, use, inventory tick, tooltip, finish, creative tab"
+
+# registration: the items are declared in the content folder next to the mod's own resources, and an
+# item registered late is refused
+[[step]]
+game = true
+[step.expect]
+items = ["content_demo:ruby", "content_demo:ruby_snack"]
+logs = ["late item refused: invalid argument: registries are frozen"]
+content_files = [
+  "data/content_demo/horizon/item/ruby.json",
+  "data/content_demo/horizon/item/ruby_snack.json",
+  "assets/content_demo/models/item/ruby.json",
+  "assets/content_demo/textures/item/ruby.png",
+  "assets/content_demo/items/ruby.json",
+  "assets/content_demo/lang/en_us.json",
+]
+no_content_files = ["data/content_demo/horizon/item/late.json"]
+
+# vanilla items raise no Fish item event (the event log only grows, so this comes first)
+[[step]]
+use_item = { item = "minecraft:stick" }
+[step.expect]
+use_result = "pass"
+no_events = ["item/use"]
+
+# using the ruby in the air: its handler decides
+[[step]]
+use_item = { item = "content_demo:ruby" }
+[step.expect]
+use_result = "success"
+logs = ["ruby used by Steve hand Main"]
+events = ["item/use handled"]
+
+# using it on a block: the game's own flow passes, then the item decides
+[[step]]
+use_block = { pos = [1, 64, 1], item = "content_demo:ruby" }
+[step.expect]
+use_result = "success"
+logs = ["ruby used on minecraft:stone at 1 64 1 face Some(Up)"]
+events = ["item/use_on_block handled"]
+
+# the inventory tick of a ruby (the mod logs it once)
+[[step]]
+inventory_tick = { item = "content_demo:ruby", slot = 3, selected = true }
+[step.expect]
+logs = ["ruby is in the inventory slot", "selected true"]
+events = ["item/inventory_tick"]
+
+# tooltip
+[[step]]
+[step.expect]
+tooltips = { "content_demo:ruby" = ["§7A gem of content_demo"] }
+
+# eating the snack
+[[step]]
+finish_using = { item = "content_demo:ruby_snack" }
+[step.expect]
+logs = ["ruby snack eaten by Steve"]
+events = ["item/finish_using"]
+
+# the creative inventory: the mod's tab, and the ruby among vanilla's ingredients
+[[step]]
+[step.expect]
+creative_tabs = ["content_demo:ruby_tab", "minecraft:ingredients"]
+creative_entries = { "content_demo:ruby_tab" = [
+  "content_demo:ruby",
+  "content_demo:ruby_snack",
+  "content_demo:ruby_block",
+  "content_demo:raw_ruby",
+], "minecraft:ingredients" = [
+  "minecraft:iron_ingot",
+  "content_demo:ruby",
+] }
+no_creative_entries = { "minecraft:building_blocks" = ["content_demo:ruby"] }

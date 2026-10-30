@@ -26,6 +26,8 @@ mod gamerules;
 mod handles;
 mod host;
 mod inner;
+mod item_services;
+mod items;
 mod load;
 mod net;
 mod net_services;
