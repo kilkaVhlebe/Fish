@@ -1,0 +1,432 @@
+Fish: Fish game rules in the in-world Game Rules screen (P8.10).
+
+The screen lists `RULES`, a const table of rules with a two-valued `Value`, and edits them through
+private state (`numbers`, `values`, `initial`), so no horizon-mixins hook can add rows to it. This
+patch lets `RulesScreen::with_fish` add the rules mods registered: a switch for a boolean rule, a
+number box for an integer or decimal one, a button cycling the choices of an enum one, each in the
+rule's category. Done writes the changed ones through `fish_hooks` (`game_rule_set`). Only the
+screen of a world this game runs has them: the call in `lan_screen.rs` passes the world's id, which
+is `None` for a remote server. Create New World's screen is untouched. It needs the bundle applied
+(`fish_bridge::rules::world_of`).
+
+diff --git a/crates/horizon-client/src/game/lan_screen.rs b/crates/horizon-client/src/game/lan_screen.rs
+index 055d1ea..e694fe5 100644
+--- a/crates/horizon-client/src/game/lan_screen.rs
++++ b/crates/horizon-client/src/game/lan_screen.rs
+@@ -919,7 +919,11 @@ impl Game<'_> {
+                     o.rules = None;
+                     self.send(S::ClientCommand(play::ClientCommand { action: 2 }));
+                 } else {
+-                    o.rules = Some(RulesScreen::new(&self.ui.rules));
++                    // Fish: the rules mods registered, with this world's values.
++                    o.rules = Some(
++                        RulesScreen::new(&self.ui.rules)
++                            .with_fish(super::fish_bridge::rules::world_of(self)),
++                    );
+                 }
+                 o.view = View::GameRules;
+             }
+diff --git a/crates/horizon-client/src/game_rules_screen.rs b/crates/horizon-client/src/game_rules_screen.rs
+index 7f7c307..43994f2 100644
+--- a/crates/horizon-client/src/game_rules_screen.rs
++++ b/crates/horizon-client/src/game_rules_screen.rs
+@@ -29,6 +29,43 @@ const INVALID: u32 = 0xFF00_00FF;
+ enum Row {
+     Category(&'static str),
+     Rule(&'static Rule),
++    /// A rule a mod registered: an index into `fish`.
++    Fish(usize),
++}
++
++/// A rule a mod registered (Fish), as the screen edits it.
++struct FishRule {
++    def: fish_hooks::GameRuleDef,
++    value: fish_hooks::RuleValue,
++    initial: fish_hooks::RuleValue,
++    /// The box of an integer or decimal rule.
++    input: Option<EditBox>,
++    category: &'static str,
++}
++
++impl FishRule {
++    /// The id the list sorts by, like a vanilla rule's description id.
++    fn key(&self) -> String {
++        format!("gamerule.{}", self.def.name.replace(':', "."))
++    }
++    fn changed(&self) -> bool {
++        self.value != self.initial
++    }
++}
++
++/// The category of a mod's rule as one of the game's own.
++fn fish_category(category: &str) -> &'static str {
++    ["chat", "drops", "misc", "mobs", "player", "spawning", "updates"]
++        .into_iter()
++        .find(|c| *c == category)
++        .unwrap_or("misc")
++}
++
++/// What has the focus: the search box, a vanilla number box or a mod's.
++enum Focus {
++    Search,
++    Rule(&'static str),
++    Fish(usize),
+ }
+ 
+ /// What a click or Escape asks of World Options.
+@@ -52,6 +89,10 @@ pub struct RulesScreen {
+     confirm: bool,
+     /// InWorldGameRulesScreen rather than WorldCreationGameRulesScreen.
+     in_world: bool,
++    /// The rules mods registered, with the values of the open world (`with_fish`).
++    fish: Vec<FishRule>,
++    /// The world `fish` were read from and are written to on Done.
++    fish_world: Option<String>,
+ }
+ 
+ fn name_key(r: &Rule) -> String {
+@@ -135,7 +176,95 @@ impl RulesScreen {
+             scroll: ui::Scroll::default(),
+             confirm: false,
+             in_world,
++            fish: Vec::new(),
++            fish_world: None,
++        }
++    }
++    /// Adds the rules mods registered, with the values `world` has; Done writes the changed
++    /// ones back. Only the screen of a world this game runs has them (not a remote server's, not
++    /// Create New World's: those worlds have no values of Fish's to read or write).
++    pub fn with_fish(mut self, world: Option<String>) -> Self {
++        let (Some(fish), Some(world)) = (fish_hooks::get(), world) else {
++            return self;
++        };
++        let mut defs = Vec::new();
++        fish.game_rules(&mut defs);
++        self.fish = defs
++            .into_iter()
++            .map(|def| {
++                let value = fish
++                    .game_rule_get(&world, &def.name)
++                    .unwrap_or_else(|| def.default.clone());
++                let input = matches!(
++                    def.kind,
++                    fish_hooks::RuleKind::Int { .. } | fish_hooks::RuleKind::Double { .. }
++                )
++                .then(|| {
++                    let mut b = EditBox::new(0.0, 0.0, 44.0, 20.0);
++                    b.focused = false;
++                    b.set_value(&value.to_string());
++                    b.text_color = VALID;
++                    b
++                });
++                FishRule {
++                    category: fish_category(&def.category),
++                    initial: value.clone(),
++                    value,
++                    input,
++                    def,
++                }
++            })
++            .collect();
++        self.fish_world = Some(world);
++        self
++    }
++    /// Done: writes the mods' changed rules to the world.
++    fn apply_fish(&mut self) {
++        let (Some(fish), Some(world)) = (fish_hooks::get(), self.fish_world.clone()) else {
++            return;
++        };
++        for rule in self.fish.iter_mut().filter(|r| r.changed()) {
++            if fish.game_rule_set(&world, &rule.def.name, &rule.value).is_ok() {
++                rule.initial = rule.value.clone();
++            }
++        }
++    }
++    /// A click on a mod's rule `f`, shown in row `row`: its switch cycles, its box takes the focus.
++    fn click_fish(
++        &mut self,
++        atlas: &HudAtlas,
++        cursor: (f32, f32),
++        w: f32,
++        row: usize,
++        f: usize,
++    ) -> Option<Exit> {
++        if !ui::hovered(cursor, control_x(w), self.row_top(row) + 2.0, 44.0, 20.0) {
++            return None;
++        }
++        self.unfocus();
++        let rule = self.fish.get_mut(f)?;
++        match &rule.def.kind {
++            fish_hooks::RuleKind::Bool => {
++                let on = matches!(rule.value, fish_hooks::RuleValue::Bool(true));
++                rule.value = fish_hooks::RuleValue::Bool(!on);
++            }
++            fish_hooks::RuleKind::Enum(choices) => {
++                let at = choices
++                    .iter()
++                    .position(|c| matches!(&rule.value, fish_hooks::RuleValue::Text(t) if t == c));
++                if let Some(next) = choices.get(at.map_or(0, |a| a + 1) % choices.len().max(1)) {
++                    rule.value = fish_hooks::RuleValue::Text(next.clone());
++                }
++            }
++            _ => {
++                if let Some(b) = rule.input.as_mut() {
++                    b.focused = true;
++                    b.reset_blink();
++                    b.click(atlas, cursor.0, false, false);
++                }
++            }
+         }
++        None
+     }
+ 
+     /// RuleList.populateChildren: the rules matching the search (id, name,
+@@ -143,7 +272,7 @@ impl RulesScreen {
+     fn rows(&self) -> Vec<Row> {
+         let filter = self.search.value.to_lowercase();
+         let has = |s: &str| s.to_lowercase().contains(&filter);
+-        let mut categories: Vec<(&'static str, Vec<&'static Rule>)> = Vec::new();
++        let mut categories: Vec<(&'static str, Vec<(String, Row)>)> = Vec::new();
+         for r in RULES {
+             let key = name_key(r);
+             let description = format!("{key}.description");
+@@ -155,8 +284,17 @@ impl RulesScreen {
+                 continue;
+             }
+             match categories.iter_mut().find(|(c, _)| *c == r.category) {
+-                Some((_, rules)) => rules.push(r),
+-                None => categories.push((r.category, vec![r])),
++                Some((_, rules)) => rules.push((key, Row::Rule(r))),
++                None => categories.push((r.category, vec![(key, Row::Rule(r))])),
++            }
++        }
++        for (i, f) in self.fish.iter().enumerate() {
++            if !(has(&f.def.name) || has(&lang::get(&category_key(f.category)))) {
++                continue;
++            }
++            match categories.iter_mut().find(|(c, _)| *c == f.category) {
++                Some((_, rules)) => rules.push((f.key(), Row::Fish(i))),
++                None => categories.push((f.category, vec![(f.key(), Row::Fish(i))])),
+             }
+         }
+         // By the categories' ids, then the rules' description ids.
+@@ -164,8 +302,8 @@ impl RulesScreen {
+         categories
+             .into_iter()
+             .flat_map(|(c, mut rules)| {
+-                rules.sort_by_key(|r| name_key(r));
+-                std::iter::once(Row::Category(c)).chain(rules.into_iter().map(Row::Rule))
++                rules.sort_by(|a, b| a.0.cmp(&b.0));
++                std::iter::once(Row::Category(c)).chain(rules.into_iter().map(|(_, row)| row))
+             })
+             .collect()
+     }
+@@ -199,6 +337,11 @@ impl RulesScreen {
+         self.numbers
+             .iter()
+             .any(|(name, b)| gamerules::rule(name).is_none_or(|r| parse(r, &b.value).is_none()))
++            || self.fish.iter().any(|f| {
++                f.input
++                    .as_ref()
++                    .is_some_and(|b| f.def.parse(&b.value).is_err())
++            })
+     }
+     fn changes(&self) -> Vec<(&'static str, Value)> {
+         RULES
+@@ -212,7 +355,8 @@ impl RulesScreen {
+     /// InWorldGameRulesScreen.onClose: pending changes ask first;
+     /// WorldCreationGameRulesScreen.onClose discards them.
+     fn close(&mut self) -> Option<Exit> {
+-        if !self.in_world || self.changes().is_empty() {
++        if !self.in_world || (self.changes().is_empty() && !self.fish.iter().any(FishRule::changed))
++        {
+             Some(Exit::Discard)
+         } else {
+             self.confirm = true;
+@@ -253,21 +397,43 @@ impl RulesScreen {
+     pub fn release(&mut self) {
+         self.scroll.release();
+     }
+-    fn focused(&mut self) -> Option<(Option<&'static str>, &mut EditBox)> {
++    fn focused(&mut self) -> Option<(Focus, &mut EditBox)> {
+         if self.search.focused {
+-            return Some((None, &mut self.search));
++            return Some((Focus::Search, &mut self.search));
+         }
+-        self.numbers
+-            .iter_mut()
+-            .find(|(_, b)| b.focused)
+-            .map(|(n, b)| (Some(*n), b))
++        if let Some(i) = self.numbers.iter().position(|(_, b)| b.focused) {
++            let (name, b) = &mut self.numbers[i];
++            return Some((Focus::Rule(*name), b));
++        }
++        let i = self
++            .fish
++            .iter()
++            .position(|f| f.input.as_ref().is_some_and(|b| b.focused))?;
++        self.fish[i].input.as_mut().map(|b| (Focus::Fish(i), b))
+     }
+     /// The focused box changed: the search filters again from the top; a
+     /// number sets its rule when valid (IntegerRuleEntry's responder).
+-    fn edited(&mut self, rule: Option<&'static str>) {
+-        let Some(name) = rule else {
+-            self.scroll.amount = 0.0;
+-            return;
++    fn edited(&mut self, focus: Focus) {
++        let name = match focus {
++            Focus::Search => {
++                self.scroll.amount = 0.0;
++                return;
++            }
++            Focus::Fish(i) => {
++                if let Some(f) = self.fish.get_mut(i)
++                    && let Some(b) = f.input.as_mut()
++                {
++                    match f.def.parse(&b.value) {
++                        Ok(v) => {
++                            f.value = v;
++                            b.text_color = VALID;
++                        }
++                        Err(_) => b.text_color = INVALID,
++                    }
++                }
++                return;
++            }
++            Focus::Rule(name) => name,
+         };
+         let Some(r) = gamerules::rule(name) else {
+             return;
+@@ -296,7 +462,13 @@ impl RulesScreen {
+         }
+     }
+     pub fn typing(&self) -> bool {
+-        !self.confirm && (self.search.focused || self.numbers.iter().any(|(_, b)| b.focused))
++        !self.confirm
++            && (self.search.focused
++                || self.numbers.iter().any(|(_, b)| b.focused)
++                || self
++                    .fish
++                    .iter()
++                    .any(|f| f.input.as_ref().is_some_and(|b| b.focused)))
+     }
+ 
+     /// A left click; Some when the screen closes.
+@@ -318,6 +490,7 @@ impl RulesScreen {
+         }
+         let [(dx, dy), (cx, cy)] = footer(w, h);
+         if on(dx, dy, 150.0, 20.0) && !self.invalid() {
++            self.apply_fish();
+             return Some(Exit::Apply(self.changes()));
+         }
+         if on(cx, cy, 150.0, 20.0) {
+@@ -339,6 +512,9 @@ impl RulesScreen {
+         }
+         let rows = self.rows();
+         let i = self.hovered(rows.len(), cursor, size)?;
++        if let Row::Fish(f) = rows[i] {
++            return self.click_fish(atlas, cursor, w, i, f);
++        }
+         let Row::Rule(r) = rows[i] else {
+             return None;
+         };
+@@ -366,6 +542,9 @@ impl RulesScreen {
+         for (_, b) in &mut self.numbers {
+             b.focused = false;
+         }
++        for b in self.fish.iter_mut().filter_map(|f| f.input.as_mut()) {
++            b.focused = false;
++        }
+     }
+     /// Whether a click lands on a button (for its sound).
+     pub fn clicks_button(&self, atlas: &HudAtlas, cursor: (f32, f32), size: (f32, f32)) -> bool {
+@@ -380,7 +559,13 @@ impl RulesScreen {
+         }
+         let rows = self.rows();
+         self.hovered(rows.len(), cursor, size).is_some_and(|i| {
+-            matches!(rows[i], Row::Rule(r) if matches!(r.default, Value::Bool(_)))
++            (matches!(rows[i], Row::Rule(r) if matches!(r.default, Value::Bool(_)))
++                || matches!(rows[i], Row::Fish(f) if self.fish.get(f).is_some_and(|f| {
++                    matches!(
++                        f.def.kind,
++                        fish_hooks::RuleKind::Bool | fish_hooks::RuleKind::Enum(_)
++                    )
++                })))
+                 && ui::hovered(cursor, control_x(w), self.row_top(i) + 2.0, 44.0, 20.0)
+         })
+     }
+@@ -455,6 +640,45 @@ impl RulesScreen {
+                         }
+                     }
+                 }
++                Row::Fish(fi) => {
++                    let Some(f) = self.fish.get_mut(fi) else {
++                        continue;
++                    };
++                    let name = lines(&atlas.font, &Text::literal(f.def.name.to_string()), 170.0);
++                    match name.as_slice() {
++                        [one] => {
++                            batch.text_styled(atlas, one, cx, cy + 5.0, u32::MAX, true);
++                        }
++                        [one, two, ..] => {
++                            batch.text_styled(atlas, one, cx, cy, u32::MAX, true);
++                            batch.text_styled(atlas, two, cx, cy + 10.0, u32::MAX, true);
++                        }
++                        [] => {}
++                    }
++                    let hover = hovered == Some(i) && ui::hovered(cursor, x, cy, 44.0, 20.0);
++                    match &f.def.kind {
++                        fish_hooks::RuleKind::Bool => {
++                            let key = if matches!(f.value, fish_hooks::RuleValue::Bool(true)) {
++                                "options.on"
++                            } else {
++                                "options.off"
++                            };
++                            let label = Text::translate(key, &[]);
++                            ui::button(batch, atlas, x, cy, 44.0, 20.0, &label, true, hover);
++                        }
++                        fish_hooks::RuleKind::Enum(_) => {
++                            let label = Text::literal(f.value.to_string());
++                            ui::button(batch, atlas, x, cy, 44.0, 20.0, &label, true, hover);
++                        }
++                        _ => {
++                            if let Some(b) = f.input.as_mut() {
++                                b.x = x;
++                                b.y = cy;
++                                b.draw(batch, atlas, None);
++                            }
++                        }
++                    }
++                }
+             }
+         }
+         batch.clip_since(first, 0.0, HEADER, w, h - FOOTER);
+@@ -524,6 +748,19 @@ impl RulesScreen {
+                 .with_color(gray),
+             );
+             ui::tooltip(batch, atlas, &tip, cursor);
++        } else if let Some(Row::Fish(fi)) = hovered.map(|i| rows[i])
++            && let Some(f) = self.fish.get(fi)
++        {
++            let gray = named_color("gray").unwrap_or(0xAAAAAA);
++            let tip = [
++                Text::literal(f.def.name.to_string()).with_color(yellow()),
++                Text::translate(
++                    "editGamerule.default",
++                    &[Text::literal(f.def.default.to_string())],
++                )
++                .with_color(gray),
++            ];
++            ui::tooltip(batch, atlas, &tip, cursor);
+         }
+     }
+ }
+@@ -561,7 +798,7 @@ mod tests {
+             .iter()
+             .filter_map(|r| match r {
+                 Row::Category(c) => Some(*c),
+-                Row::Rule(_) => None,
++                Row::Rule(_) | Row::Fish(_) => None,
+             })
+             .collect();
+         assert_eq!(

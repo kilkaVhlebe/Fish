@@ -20,6 +20,7 @@ pub mod client;
 pub mod commands;
 pub mod debug;
 pub mod game;
+pub mod gamerules;
 pub mod ident;
 pub mod networking;
 pub mod registry;

@@ -83,6 +83,10 @@ impl TestHost {
     /// Starts the game: `server_starting`, the server's first tick (which fires `world_load` and
     /// `server_started`) and the first frame (`client_started`).
     pub fn start_game(&mut self) {
+        // The world opens: the game reads its saved rules.
+        if let Some(world) = self.world_id() {
+            self.rules_dispatch().game_rules_load(&world);
+        }
         self.game_event(&Self::at(Kind::ServerStarting));
         self.tick_integrated_server(1);
         self.frame(1);
@@ -91,6 +95,10 @@ impl TestHost {
     /// Stops the game: `client_stopping`, `server_stopping` (the loader then fires `world_unload`
     /// for every loaded level), `server_stopped`, `client_stopped`.
     pub fn stop_game(&mut self) {
+        // The world is saved with its rules.
+        if let Some(world) = self.world_id() {
+            self.rules_dispatch().game_rules_save(&world);
+        }
         self.game_event(&Self::at(Kind::ClientStopping));
         self.game_event(&Self::at(Kind::ServerStopping));
         self.game_event(&Self::at(Kind::ServerStopped));

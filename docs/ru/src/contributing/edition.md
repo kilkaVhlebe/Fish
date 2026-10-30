@@ -56,3 +56,7 @@ cargo xtask edition regressions                # собственные тест
 Четыре точки сети находятся в функциях, которые horizon-mixins отвергает (непрозрачные макросы, `?` с замыканиями).
 Это unified diff в `horizon/patches/0001..0004`; `edition stage` применяет их после `git apply --check`. При смене
 версии Horizon упавший патч правится вручную; каждый добавляет вызов в `fish_bridge::net`.
+
+`0005-gamerule-screen.patch` — не точка хука: экран игровых правил хранит строки и состояние ввода в приватных полях одной
+структуры, поэтому для правил модов нужны новые поля (`RulesScreen::with_fish`). Патч вызывает
+`fish_bridge::rules::world_of` из `game/lan_screen.rs`.

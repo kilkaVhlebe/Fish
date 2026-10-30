@@ -16,5 +16,5 @@ let raw = fish_api::registry::register("fish:blocks", "mymod:ruby_block")?;
 
 ## Status
 
-This is the registry core. Blocks, items, item groups, tags, sounds, particles and game rules (the rest of roadmap P8) are
+This is the registry core. Blocks, items, item groups, sounds and particles (the rest of roadmap P8; game rules have [their own page](game_rule.md)) are
 not implemented: they need content overlay hooks in Horizon.

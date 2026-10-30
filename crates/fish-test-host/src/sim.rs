@@ -43,6 +43,9 @@ pub struct Sim {
     pub broken: Vec<String>,
     /// Players currently joined.
     pub players: BTreeSet<String>,
+    /// The world the game runs (a folder below `saves/` of the game directory); `None` simulates
+    /// the main menu. Game rules are kept per world.
+    pub world: Option<String>,
 }
 
 impl Default for Sim {
@@ -63,6 +66,7 @@ impl Default for Sim {
             received: Vec::new(),
             broken: Vec::new(),
             players: BTreeSet::new(),
+            world: Some("world".to_string()),
             player: Some(PlayerSnapshot {
                 x: 0.5,
                 y: 64.0,
@@ -103,6 +107,18 @@ impl ClientView for SimView<'_> {
     fn game_dir(&self) -> PathBuf {
         self.dir.clone()
     }
+
+    fn world_id(&self) -> Option<String> {
+        self.sim
+            .world
+            .as_ref()
+            .map(|w| world_dir(&self.dir, w).to_string_lossy().into_owned())
+    }
+}
+
+/// The folder of the simulated world `name` in the game directory `dir`.
+pub fn world_dir(dir: &std::path::Path, name: &str) -> PathBuf {
+    dir.join("saves").join(name)
 }
 
 /// A HUD that records the text mods draw.
@@ -189,5 +205,16 @@ mod tests {
             sim: &mut sim,
         };
         assert!(view.player().is_none());
+        assert_eq!(
+            view.world_id().unwrap(),
+            world_dir(std::path::Path::new(""), "world").to_string_lossy()
+        );
+        sim.world = None;
+        let view = SimView {
+            role: Role::Window,
+            dir: PathBuf::new(),
+            sim: &mut sim,
+        };
+        assert_eq!(view.world_id(), None);
     }
 }

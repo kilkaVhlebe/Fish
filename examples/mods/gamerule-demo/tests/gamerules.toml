@@ -1,0 +1,91 @@
+name = "game rules: defaults, /gamerule, change callbacks, per-world values and saving"
+
+# the defaults, before any world set anything
+[[step]]
+game = true
+[step.expect]
+logs = [
+  "rules at start: allow_stone_break=Ok(true) sparkle_limit=Ok(8) damage_scale=Ok(1.0) difficulty_mode=Ok(\"normal\")",
+  "late game rule refused: invalid argument: registries are frozen",
+]
+gamerules = { "gamerule_demo:allow_stone_break" = true, "gamerule_demo:sparkle_limit" = 8, "gamerule_demo:damage_scale" = 1.0, "gamerule_demo:difficulty_mode" = "normal" }
+
+# /gamerule: query, set, change callback, the rule takes effect on the server
+[[step]]
+gamerule = { name = "gamerule_demo:sparkle_limit" }
+[step.expect]
+command_feedback = ["Gamerule gamerule_demo:sparkle_limit is currently set to: 8"]
+
+[[step]]
+gamerule = { name = "gamerule_demo:sparkle_limit", value = 12 }
+[step.expect]
+command_ok = true
+command_feedback = ["Gamerule gamerule_demo:sparkle_limit is now set to: 12"]
+logs = ["sparkle_limit changed Int(8) -> Int(12)"]
+gamerules = { "gamerule_demo:sparkle_limit" = 12 }
+
+[[step]]
+gamerule = { name = "gamerule_demo:sparkle_limit", value = 12 }
+[step.expect]
+command_ok = false
+command_feedback = ["Gamerule gamerule_demo:sparkle_limit is already set to: 12"]
+
+[[step]]
+gamerule = { name = "gamerule_demo:sparkle_limit", value = 65 }
+[step.expect]
+command_ok = false
+command_feedback = ["gamerule_demo:sparkle_limit must be between 0 and 64, not 65"]
+gamerules = { "gamerule_demo:sparkle_limit" = 12 }
+
+[[step]]
+gamerule = { name = "gamerule_demo:difficulty_mode", value = "hard" }
+[step.expect]
+command_feedback = ["Gamerule gamerule_demo:difficulty_mode is now set to: hard"]
+
+[[step]]
+gamerule = { name = "gamerule_demo:damage_scale", value = 2.5 }
+[step.expect]
+command_feedback = ["Gamerule gamerule_demo:damage_scale is now set to: 2.5"]
+gamerules = { "gamerule_demo:damage_scale" = 2.5, "gamerule_demo:difficulty_mode" = "hard" }
+
+[[step]]
+break_block = { pos = [1, 64, 1], block = "minecraft:stone" }
+[step.expect]
+no_events = ["block_break_canceled"]
+broken = ["1 64 1 minecraft:stone"]
+
+[[step]]
+gamerule = { name = "gamerule_demo:allow_stone_break", value = false }
+break_block = { pos = [2, 64, 2], block = "minecraft:stone" }
+[step.expect]
+logs = ["stone breaking is switched off at 2 64 2"]
+events = ["interaction/block_break_canceled"]
+
+# a mod writes a rule too
+[[step]]
+command = "rules cap"
+[step.expect]
+logs = ["capped the sparkle limit", "sparkle_limit changed Int(12) -> Int(4)"]
+gamerules = { "gamerule_demo:sparkle_limit" = 4 }
+
+# another world has its own values; switching saves and loads
+[[step]]
+world = "other"
+[step.expect]
+gamerules = { "gamerule_demo:sparkle_limit" = 8, "gamerule_demo:allow_stone_break" = true, "gamerule_demo:difficulty_mode" = "normal" }
+
+[[step]]
+command = "rules show"
+[step.expect]
+logs = ["rules: allow_stone_break=Ok(true) sparkle_limit=Ok(8) damage_scale=Ok(1.0) difficulty_mode=Ok(\"normal\")"]
+
+[[step]]
+world = "world"
+[step.expect]
+gamerules = { "gamerule_demo:sparkle_limit" = 4, "gamerule_demo:allow_stone_break" = false, "gamerule_demo:difficulty_mode" = "hard", "gamerule_demo:damage_scale" = 2.5 }
+
+# back in the first world: its rules were saved to disk and are read back
+[[step]]
+command = "rules show"
+[step.expect]
+logs = ["rules: allow_stone_break=Ok(false) sparkle_limit=Ok(4) damage_scale=Ok(2.5) difficulty_mode=Ok(\"hard\")"]

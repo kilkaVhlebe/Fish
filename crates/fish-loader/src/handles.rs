@@ -70,6 +70,8 @@ impl Handles {
         view: &mut dyn ClientView,
         f: impl FnOnce(FishHandle) -> R,
     ) -> R {
+        // Game rules read and write the world of the game whose event runs.
+        let _world = crate::gamerules::enter(view.world_id());
         // SAFETY: the erased lifetime is never observed after this function returns: the guard
         // below invalidates the handle (and its pointer) when `f` ends, even on unwind.
         let ptr: *mut (dyn ClientView + 'static) = unsafe { std::mem::transmute(view) };

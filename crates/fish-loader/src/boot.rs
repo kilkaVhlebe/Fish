@@ -255,6 +255,10 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             fish_abi::commands::SERVICE_COMMANDS,
             std::ptr::from_ref(&crate::command_services::COMMANDS) as usize,
         ),
+        (
+            fish_abi::gamerules::SERVICE_GAME_RULE,
+            std::ptr::from_ref(&crate::gamerule_services::GAME_RULE) as usize,
+        ),
     ] {
         inner.services.write().expect("services").insert(
             id.to_string(),

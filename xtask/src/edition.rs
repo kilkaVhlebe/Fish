@@ -629,6 +629,25 @@ pub fn verify_e2e_log(log: &str) -> Result<()> {
     Ok(())
 }
 
+/// Checks what the `gamerule_demo` mod logged during the e2e scenarios: its rules at the start,
+/// the late registration refusal and the change the `/gamerule` command made.
+pub fn verify_gamerule_log(log: &str) -> Result<()> {
+    let demo = |needle: &str| {
+        log.lines()
+            .any(|l| l.contains("[fish/gamerule_demo]") && l.contains(needle))
+    };
+    for needle in [
+        "rules at start: allow_stone_break=Ok(true) sparkle_limit=Ok(8)",
+        "late game rule refused: invalid argument: registries are frozen",
+        "sparkle_limit changed Int(8) -> Int(12)",
+    ] {
+        if !demo(needle) {
+            bail!("latest.log has no `[fish/gamerule_demo] ... {needle} ...` line");
+        }
+    }
+    Ok(())
+}
+
 /// Checks what the `events_demo` mod logged during the e2e scenarios: the lifecycle and join events,
 /// the chat filter and rewrite, the block-break veto and the data reload.
 pub fn verify_events_log(log: &str) -> Result<()> {
@@ -781,7 +800,8 @@ pub fn e2e(
     let _ = cfg;
     let hello = build_hello(root)?;
     let demo = build_example_mod(root, "events-demo", "events_demo-0.1.0.fish")?;
-    let mods = std::env::join_paths([&hello, &demo]).context("joining the mod paths")?;
+    let rules = build_example_mod(root, "gamerule-demo", "gamerule_demo-0.1.0.fish")?;
+    let mods = std::env::join_paths([&hello, &demo, &rules]).context("joining the mod paths")?;
     let scratch = root.join("target/e2e");
     if scratch.exists() {
         fs::remove_dir_all(&scratch)?;
@@ -846,6 +866,32 @@ pub fn e2e(
         ctl(horizon_ctl, &home, &["wait", "5"])?;
         ctl(horizon_ctl, &home, &["mouse", "left", "click"])?;
         ctl(horizon_ctl, &home, &["wait", "10"])?;
+        // A game rule of a mod: the command tree knows it (`/help`), `/gamerule` queries and sets it,
+        // a value out of its bounds is refused, and the mod sees the change.
+        let rule = "gamerule_demo:sparkle_limit";
+        let gamerule = |line: &str| ctl(horizon_ctl, &home, &["command", line]);
+        let help = gamerule("help gamerule")?;
+        if !help.contains(rule) {
+            bail!("`/help gamerule` does not list {rule}: {help}");
+        }
+        let query = gamerule(&format!("gamerule {rule}"))?;
+        if !(query.contains(rule) && query.contains("currently set to") && query.contains('8')) {
+            bail!("`/gamerule {rule}` did not report the default 8: {query}");
+        }
+        let set = gamerule(&format!("gamerule {rule} 12"))?;
+        if !(set.contains("now set to") && set.contains("12")) {
+            bail!("`/gamerule {rule} 12` did not confirm: {set}");
+        }
+        gamerule(&format!("gamerule {rule} 99"))?;
+        let kept = gamerule(&format!("gamerule {rule}"))?;
+        if !kept.contains("12") {
+            bail!("a value out of bounds changed {rule}: {kept}");
+        }
+        let mode = gamerule("gamerule gamerule_demo:difficulty_mode hard")?;
+        if !mode.contains("hard") {
+            bail!("`/gamerule gamerule_demo:difficulty_mode hard` did not confirm: {mode}");
+        }
+        ctl(horizon_ctl, &home, &["wait", "5"])?;
         // A data reload, then the F3 screen (it lists `events-demo is listening`) for the screenshot.
         ctl(horizon_ctl, &home, &["command", "reload"])?;
         ctl(horizon_ctl, &home, &["wait", "40"])?;
@@ -860,6 +906,7 @@ pub fn e2e(
         let log = fs::read_to_string(home.join("logs/latest.log")).context("reading latest.log")?;
         verify_e2e_log(&log)?;
         verify_events_log(&log)?;
+        verify_gamerule_log(&log)?;
         if !shot.is_file() {
             bail!("no screenshot was written to {}", shot.display());
         }
@@ -1043,6 +1090,24 @@ mod tests {
                 .contains("Fish says hello")
         );
         assert_eq!(log_lines_with("a\nb c\nc", "c"), ["b c", "c"]);
+    }
+
+    #[test]
+    fn gamerule_log_expectations() {
+        let line = |s: &str| format!("[12:00:00] [Server thread/INFO]: [fish/gamerule_demo] {s}\n");
+        let mut log = line("rules at start: allow_stone_break=Ok(true) sparkle_limit=Ok(8) x");
+        log += &line("late game rule refused: invalid argument: registries are frozen");
+        assert!(
+            verify_gamerule_log(&log)
+                .unwrap_err()
+                .to_string()
+                .contains("sparkle_limit changed")
+        );
+        log += &line("sparkle_limit changed Int(8) -> Int(12)");
+        assert!(verify_gamerule_log(&log).is_ok());
+        // another mod's line does not count
+        let other = log.replace("gamerule_demo", "other");
+        assert!(verify_gamerule_log(&other).is_err());
     }
 
     #[test]

@@ -63,6 +63,11 @@ pub trait ClientView {
     fn level_id(&self) -> String {
         "minecraft:overworld".to_string()
     }
+    /// The world this game runs, for per-world data such as game rules: a stable id (the world's
+    /// directory). `None` where there is no world of its own (the main menu, a remote server).
+    fn world_id(&self) -> Option<String> {
+        None
+    }
 }
 
 /// Who typed a command.
@@ -116,6 +121,151 @@ pub struct NativeModRow {
     pub description: String,
     /// Keys: name, label, default key (`key.keyboard.z`).
     pub keys: Vec<[String; 3]>,
+}
+
+/// The type of a Fish game rule, with its bounds.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RuleKind {
+    /// `true` or `false`.
+    Bool,
+    /// A whole number in `min..=max`.
+    Int {
+        /// Smallest value.
+        min: i32,
+        /// Largest value.
+        max: i32,
+    },
+    /// A number in `min..=max`.
+    Double {
+        /// Smallest value.
+        min: f64,
+        /// Largest value.
+        max: f64,
+    },
+    /// One of the named choices.
+    Enum(Vec<String>),
+}
+
+/// The value of a Fish game rule.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RuleValue {
+    /// A [`RuleKind::Bool`] value.
+    Bool(bool),
+    /// A [`RuleKind::Int`] value.
+    Int(i32),
+    /// A [`RuleKind::Double`] value.
+    Double(f64),
+    /// A [`RuleKind::Enum`] value: one of the choices.
+    Text(String),
+}
+
+impl std::fmt::Display for RuleValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuleValue::Bool(b) => write!(f, "{b}"),
+            RuleValue::Int(i) => write!(f, "{i}"),
+            RuleValue::Double(d) if d.fract() == 0.0 && d.abs() < 1.0e15 => write!(f, "{d:.1}"),
+            RuleValue::Double(d) => write!(f, "{d}"),
+            RuleValue::Text(t) => f.write_str(t),
+        }
+    }
+}
+
+/// A game rule a mod registered.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GameRuleDef {
+    /// The rule's id, `namespace:path`.
+    pub name: String,
+    /// The category it is listed under: `player`, `mobs`, `spawning`, `drops`, `updates`, `chat` or `misc`.
+    pub category: String,
+    /// Its type and bounds.
+    pub kind: RuleKind,
+    /// The value of a world that never set it.
+    pub default: RuleValue,
+}
+
+impl GameRuleDef {
+    /// Checks that `value` has the rule's type and lies within its bounds.
+    pub fn check(&self, value: &RuleValue) -> Result<(), String> {
+        let name = &self.name;
+        match (&self.kind, value) {
+            (RuleKind::Bool, RuleValue::Bool(_)) => Ok(()),
+            (RuleKind::Int { min, max }, RuleValue::Int(v)) => {
+                if (*min..=*max).contains(v) {
+                    Ok(())
+                } else {
+                    Err(format!("{name} must be between {min} and {max}, not {v}"))
+                }
+            }
+            (RuleKind::Double { min, max }, RuleValue::Double(v)) => {
+                if v.is_finite() && (*min..=*max).contains(v) {
+                    Ok(())
+                } else {
+                    Err(format!("{name} must be between {min} and {max}, not {v}"))
+                }
+            }
+            (RuleKind::Enum(choices), RuleValue::Text(t)) => {
+                if choices.iter().any(|c| c == t) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "{name} must be one of {}, not {t}",
+                        choices.join(", ")
+                    ))
+                }
+            }
+            (kind, _) => Err(format!(
+                "{name} expects {}, got {}",
+                kind.noun(),
+                value.noun()
+            )),
+        }
+    }
+
+    /// Reads `text` as a value of the rule's type (what a command argument or a UI box holds).
+    pub fn parse(&self, text: &str) -> Result<RuleValue, String> {
+        let name = &self.name;
+        let value = match &self.kind {
+            RuleKind::Bool => match text {
+                "true" => RuleValue::Bool(true),
+                "false" => RuleValue::Bool(false),
+                _ => return Err(format!("{name} takes true or false, not {text}")),
+            },
+            RuleKind::Int { .. } => RuleValue::Int(
+                text.parse()
+                    .map_err(|_| format!("{name} takes a whole number, not {text}"))?,
+            ),
+            RuleKind::Double { .. } => RuleValue::Double(
+                text.parse()
+                    .map_err(|_| format!("{name} takes a number, not {text}"))?,
+            ),
+            RuleKind::Enum(_) => RuleValue::Text(text.to_string()),
+        };
+        self.check(&value)?;
+        Ok(value)
+    }
+}
+
+impl RuleKind {
+    fn noun(&self) -> &'static str {
+        match self {
+            RuleKind::Bool => "a boolean",
+            RuleKind::Int { .. } => "an integer",
+            RuleKind::Double { .. } => "a decimal",
+            RuleKind::Enum(_) => "a choice",
+        }
+    }
+}
+
+impl RuleValue {
+    fn noun(&self) -> &'static str {
+        match self {
+            RuleValue::Bool(_) => "a boolean",
+            RuleValue::Int(_) => "an integer",
+            RuleValue::Double(_) => "a decimal",
+            RuleValue::Text(_) => "a choice",
+        }
+    }
 }
 
 /// The game events of phase P6, in the order of `fish_abi::game::EVENTS`.
@@ -527,6 +677,115 @@ pub trait Dispatch: Send + Sync {
     fn settings_buttons(&self, _mod_id: &str, _out: &mut Vec<String>) {}
     /// Button `index` of mod `mod_id`'s settings page was clicked.
     fn settings_click(&self, _game: &mut dyn ClientView, _mod_id: &str, _index: usize) {}
+    /// The game rules mods registered, in registration order.
+    fn game_rules(&self, _out: &mut Vec<GameRuleDef>) {}
+    /// The current value of Fish rule `name` in `world` (a [`ClientView::world_id`]); `None` when
+    /// no mod registered the rule.
+    fn game_rule_get(&self, _world: &str, _name: &str) -> Option<RuleValue> {
+        None
+    }
+    /// Sets Fish rule `name` in `world` and returns the previous value. Fails with a message when
+    /// the rule is unknown or `value` has the wrong type or lies outside the rule's bounds.
+    fn game_rule_set(
+        &self,
+        _world: &str,
+        _name: &str,
+        _value: &RuleValue,
+    ) -> Result<RuleValue, String> {
+        Err("no Fish game rules".to_string())
+    }
+    /// A world was opened: reads its saved Fish rule values (`data/fish/game_rules.json`).
+    fn game_rules_load(&self, _world: &str) {}
+    /// A world is being saved: writes its Fish rule values beside the game's own.
+    fn game_rules_save(&self, _world: &str) {}
+}
+
+/// What `/gamerule <fish rule> [<value>]` did, for the game (and the simulation) to word.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GameRuleReply {
+    /// No value was given: the rule's current value.
+    Query {
+        /// The rule.
+        name: String,
+        /// Its value, as text.
+        value: String,
+        /// The command result (a boolean as 0 or 1, an integer as is, a decimal truncated, an
+        /// enum as the index of its choice).
+        result: i32,
+    },
+    /// The rule was set.
+    Set {
+        /// The rule.
+        name: String,
+        /// The new value, as text.
+        value: String,
+        /// The command result, as for `Query`.
+        result: i32,
+    },
+    /// The rule already had the value: nothing changed.
+    Unchanged {
+        /// The rule.
+        name: String,
+        /// The value, as text.
+        value: String,
+    },
+    /// The value was refused; the text says why.
+    Failed(String),
+}
+
+/// The result number a rule value stands for in a command (`/execute store`).
+fn rule_result(def: &GameRuleDef, value: &RuleValue) -> i32 {
+    match value {
+        RuleValue::Bool(b) => i32::from(*b),
+        RuleValue::Int(i) => *i,
+        RuleValue::Double(d) => *d as i32,
+        RuleValue::Text(t) => match &def.kind {
+            RuleKind::Enum(choices) => choices.iter().position(|c| c == t).unwrap_or(0) as i32,
+            _ => 0,
+        },
+    }
+}
+
+/// Runs `/gamerule <name> [<value>]` for a Fish rule in `world`. `None` when no mod registered
+/// `name`: the game then treats it as it does any other unknown rule. `value` is the argument's
+/// text (`true`, `7`, `1.5`, a choice).
+pub fn game_rule_command(
+    dispatch: &dyn Dispatch,
+    world: &str,
+    name: &str,
+    value: Option<&str>,
+) -> Option<GameRuleReply> {
+    let mut defs = Vec::new();
+    dispatch.game_rules(&mut defs);
+    let def = defs.into_iter().find(|d| d.name == name)?;
+    let current = dispatch
+        .game_rule_get(world, name)
+        .unwrap_or_else(|| def.default.clone());
+    let Some(text) = value else {
+        return Some(GameRuleReply::Query {
+            name: def.name.clone(),
+            value: current.to_string(),
+            result: rule_result(&def, &current),
+        });
+    };
+    let wanted = match def.parse(text) {
+        Ok(v) => v,
+        Err(why) => return Some(GameRuleReply::Failed(why)),
+    };
+    if wanted == current {
+        return Some(GameRuleReply::Unchanged {
+            name: def.name,
+            value: wanted.to_string(),
+        });
+    }
+    Some(match dispatch.game_rule_set(world, name, &wanted) {
+        Ok(_) => GameRuleReply::Set {
+            name: def.name.clone(),
+            value: wanted.to_string(),
+            result: rule_result(&def, &wanted),
+        },
+        Err(why) => GameRuleReply::Failed(why),
+    })
 }
 
 static DISPATCH: OnceLock<&'static dyn Dispatch> = OnceLock::new();
@@ -632,6 +891,14 @@ mod tests {
         assert!(buttons.is_empty());
         assert_eq!(Hud.text_width("abc"), 3.0);
         assert_eq!(Hud.gui_size(), [1.0, 1.0]);
+        let mut rules = Vec::new();
+        d.game_rules(&mut rules);
+        assert!(rules.is_empty());
+        assert_eq!(d.game_rule_get("w", "a:b"), None);
+        assert!(d.game_rule_set("w", "a:b", &RuleValue::Bool(true)).is_err());
+        d.game_rules_load("w");
+        d.game_rules_save("w");
+        assert_eq!(v.world_id(), None);
     }
 
     #[test]
@@ -660,5 +927,157 @@ mod tests {
         assert!(get().is_some());
         assert!(!install(&D));
         let _ = first;
+    }
+
+    fn def(kind: RuleKind, default: RuleValue) -> GameRuleDef {
+        GameRuleDef {
+            name: "m:r".to_string(),
+            category: "misc".to_string(),
+            kind,
+            default,
+        }
+    }
+
+    #[test]
+    fn rule_values_are_checked_against_their_kind_and_bounds() {
+        let b = def(RuleKind::Bool, RuleValue::Bool(false));
+        assert_eq!(b.parse("true"), Ok(RuleValue::Bool(true)));
+        assert_eq!(
+            b.parse("yes").unwrap_err(),
+            "m:r takes true or false, not yes"
+        );
+        assert_eq!(
+            b.check(&RuleValue::Int(1)).unwrap_err(),
+            "m:r expects a boolean, got an integer"
+        );
+        let i = def(RuleKind::Int { min: 0, max: 10 }, RuleValue::Int(3));
+        assert_eq!(i.parse("7"), Ok(RuleValue::Int(7)));
+        assert_eq!(
+            i.parse("11").unwrap_err(),
+            "m:r must be between 0 and 10, not 11"
+        );
+        assert_eq!(i.parse("x").unwrap_err(), "m:r takes a whole number, not x");
+        let d = def(
+            RuleKind::Double {
+                min: -1.0,
+                max: 1.0,
+            },
+            RuleValue::Double(0.5),
+        );
+        assert_eq!(d.parse("0.25"), Ok(RuleValue::Double(0.25)));
+        assert!(d.parse("2").is_err());
+        assert!(d.parse("nan").is_err());
+        assert_eq!(d.parse("x").unwrap_err(), "m:r takes a number, not x");
+        let e = def(
+            RuleKind::Enum(vec!["easy".into(), "hard".into()]),
+            RuleValue::Text("easy".into()),
+        );
+        assert_eq!(e.parse("hard"), Ok(RuleValue::Text("hard".into())));
+        assert_eq!(
+            e.parse("medium").unwrap_err(),
+            "m:r must be one of easy, hard, not medium"
+        );
+        assert!(e.check(&RuleValue::Double(1.0)).is_err());
+        assert!(d.check(&RuleValue::Text("a".into())).is_err());
+        assert!(e.check(&RuleValue::Bool(true)).is_err());
+    }
+
+    #[test]
+    fn rule_values_display_like_the_game_prints_them() {
+        assert_eq!(RuleValue::Bool(true).to_string(), "true");
+        assert_eq!(RuleValue::Int(-4).to_string(), "-4");
+        assert_eq!(RuleValue::Double(2.0).to_string(), "2.0");
+        assert_eq!(RuleValue::Double(0.125).to_string(), "0.125");
+        assert_eq!(RuleValue::Text("hard".into()).to_string(), "hard");
+    }
+
+    /// A dispatcher with two rules and values kept in memory.
+    struct Rules(std::sync::Mutex<std::collections::HashMap<String, RuleValue>>);
+
+    impl Dispatch for Rules {
+        fn game_rules(&self, out: &mut Vec<GameRuleDef>) {
+            out.push(def(RuleKind::Int { min: 0, max: 10 }, RuleValue::Int(3)));
+            let mut mode = def(
+                RuleKind::Enum(vec!["easy".into(), "hard".into()]),
+                RuleValue::Text("easy".into()),
+            );
+            mode.name = "m:mode".to_string();
+            out.push(mode);
+        }
+
+        fn game_rule_get(&self, _world: &str, name: &str) -> Option<RuleValue> {
+            self.0.lock().unwrap().get(name).cloned()
+        }
+
+        fn game_rule_set(
+            &self,
+            _world: &str,
+            name: &str,
+            value: &RuleValue,
+        ) -> Result<RuleValue, String> {
+            if name == "m:r" && *value == RuleValue::Int(9) {
+                return Err("refused".to_string());
+            }
+            let old = self
+                .0
+                .lock()
+                .unwrap()
+                .insert(name.to_string(), value.clone());
+            Ok(old.unwrap_or(RuleValue::Int(3)))
+        }
+    }
+
+    #[test]
+    fn the_gamerule_command_queries_sets_and_refuses() {
+        let d = Rules(Default::default());
+        let run = |name: &str, value: Option<&str>| game_rule_command(&d, "w", name, value);
+        assert_eq!(run("m:nope", None), None);
+        assert_eq!(
+            run("m:r", None),
+            Some(GameRuleReply::Query {
+                name: "m:r".into(),
+                value: "3".into(),
+                result: 3
+            })
+        );
+        assert_eq!(
+            run("m:r", Some("3")),
+            Some(GameRuleReply::Unchanged {
+                name: "m:r".into(),
+                value: "3".into()
+            })
+        );
+        assert_eq!(
+            run("m:r", Some("7")),
+            Some(GameRuleReply::Set {
+                name: "m:r".into(),
+                value: "7".into(),
+                result: 7
+            })
+        );
+        assert_eq!(
+            run("m:r", Some("11")),
+            Some(GameRuleReply::Failed(
+                "m:r must be between 0 and 10, not 11".into()
+            ))
+        );
+        assert_eq!(
+            run("m:r", Some("9")),
+            Some(GameRuleReply::Failed("refused".into()))
+        );
+        assert_eq!(
+            run("m:mode", Some("hard")),
+            Some(GameRuleReply::Set {
+                name: "m:mode".into(),
+                value: "hard".into(),
+                result: 1
+            })
+        );
+        let double = def(
+            RuleKind::Double { min: 0.0, max: 9.0 },
+            RuleValue::Double(2.5),
+        );
+        assert_eq!(rule_result(&double, &RuleValue::Double(2.5)), 2);
+        assert_eq!(rule_result(&double, &RuleValue::Text("x".into())), 0);
     }
 }

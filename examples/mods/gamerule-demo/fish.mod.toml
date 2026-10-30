@@ -1,0 +1,12 @@
+schema = 1
+id = "gamerule_demo"
+version = "0.1.0"
+name = "Game Rule Demo"
+description = "Fish example mod: game rules"
+license = "MIT"
+
+[library]
+name = "gamerule_demo"
+
+[entrypoints]
+main = ["init"]

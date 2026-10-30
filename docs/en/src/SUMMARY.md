@@ -23,5 +23,6 @@
   - [Networking](modders/networking.md)
   - [Registries](modders/registry.md)
   - [Tags](modders/tags.md)
+  - [Game rules](modders/game_rule.md)
 - [Tooling](modders/tooling.md)
 - [Testing](modders/testing.md)

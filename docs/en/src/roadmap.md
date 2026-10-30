@@ -92,7 +92,7 @@ file and in the Russian copy at the same time.
 - [x] **P8.7** `tag` and convention tags
 - [ ] **P8.8** Sound events
 - [ ] **P8.9** Particle types
-- [ ] **P8.10** `game_rule`
+- [x] **P8.10** `game_rule`
 - [ ] **P8.11** Tests, `content-demo`, e2e
 - [ ] **P8.12** Docs
 

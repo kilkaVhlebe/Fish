@@ -16,3 +16,9 @@ path = "../../fish/crates/fish-loader"
 crate = "crates/horizon-client"
 name = "fish-hooks"
 path = "../../fish/crates/fish-hooks"
+
+# `/gamerule` completion: the command tree is built in horizon-command.
+[[dependency]]
+crate = "crates/horizon-command"
+name = "fish-hooks"
+path = "../../fish/crates/fish-hooks"

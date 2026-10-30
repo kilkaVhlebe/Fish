@@ -23,5 +23,6 @@
   - [Сеть](modders/networking.md)
   - [Реестры](modders/registry.md)
   - [Теги](modders/tags.md)
+  - [Игровые правила](modders/game_rule.md)
 - [Инструменты](modders/tooling.md)
 - [Тестирование](modders/testing.md)

@@ -62,6 +62,10 @@ impl ClientView for GameView<'_, '_> {
     fn level_id(&self) -> String {
         self.game.dim.id().to_string()
     }
+
+    fn world_id(&self) -> Option<String> {
+        super::rules::world_of(self.game)
+    }
 }
 
 /// A read-only copy of what the HUD pass needs, so the draw target can borrow the game.
@@ -71,6 +75,7 @@ pub(in crate::game) struct SnapshotView {
     player: Option<PlayerSnapshot>,
     dir: PathBuf,
     window: bool,
+    world: Option<String>,
     pub(in crate::game) chat: Vec<String>,
 }
 
@@ -81,6 +86,7 @@ impl SnapshotView {
             player: player_of(game),
             dir: dir_of(game),
             window: game.native_window(),
+            world: super::rules::world_of(game),
             chat: Vec::new(),
         }
     }
@@ -103,6 +109,10 @@ impl ClientView for SnapshotView {
 
     fn game_dir(&self) -> PathBuf {
         self.dir.clone()
+    }
+
+    fn world_id(&self) -> Option<String> {
+        self.world.clone()
     }
 }
 

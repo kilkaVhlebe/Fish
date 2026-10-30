@@ -54,3 +54,7 @@ commit, which adds optional public visibility for support modules (needed once h
 Four hook sites for networking sit in functions that horizon-mixins rejects (opaque macros, `?` plus closures). They are
 unified diffs in `horizon/patches/0001..0004`, applied by `edition stage` (after a `git apply --check`). When Horizon
 moves, fix a failing patch by hand; each adds a call into `fish_bridge::net`.
+
+`0005-gamerule-screen.patch` is not a hook site: the Game Rules screen keeps its rows and edit state in private fields
+of one struct, so showing the rules of mods needs new fields (`RulesScreen::with_fish`). It calls
+`fish_bridge::rules::world_of` from `game/lan_screen.rs`.

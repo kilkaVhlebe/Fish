@@ -186,7 +186,7 @@ pub(crate) fn lookup(id: &str) -> Option<*const c_void> {
         ids::COMMAND_RAW => (&raw const COMMAND_RAW).cast(),
         fish_abi::commands::SERVICE_COMMANDS => (&raw const COMMANDS).cast(),
         fish_abi::networking::SERVICE_NETWORKING => (&raw const NETWORKING).cast(),
-        _ => return None,
+        _ => return crate::fake_rules::lookup(id),
     })
 }
 

@@ -411,3 +411,32 @@ target = "horizon_client::game::remote::Game<'_>::leave_server"
 kind = "HEAD"
 helper = "helpers/net_left.rs"
 bindings = [ { name = "game", ty = "&Game<'_>", value = "&*self" }, { name = "reason", ty = "&Option<String>", value = "&reason" } ]
+
+[[injection]]
+id = "gamerule"
+target = "horizon_client::game::commands::Game<'_>::cmd_gamerule"
+kind = "HEAD"
+cancellable = true
+helper = "helpers/gamerule.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "ctx", ty = "&Context", value = "ctx" } ]
+
+[[injection]]
+id = "gamerule-load"
+target = "horizon_client::game::chat::Game<'_>::load_world_state"
+kind = "HEAD"
+helper = "helpers/gamerule_load.rs"
+bindings = [ { name = "game", ty = "&Game<'_>", value = "&*self" } ]
+
+[[injection]]
+id = "gamerule-save"
+target = "horizon_client::game::Game<'_>::save_game_metadata"
+kind = "HEAD"
+helper = "helpers/gamerule_save.rs"
+bindings = [ { name = "game", ty = "&Game<'_>", value = "&*self" } ]
+
+[[injection]]
+id = "gamerule-tree"
+target = "horizon_command::vanilla::build_with"
+kind = "RETURN"
+helper = "helpers/gamerule_tree.rs"
+bindings = [ { name = "d", ty = "Dispatcher", value = "$value" } ]

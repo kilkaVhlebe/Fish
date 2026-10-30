@@ -1683,6 +1683,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "gamerule-demo"
+version = "0.1.0"
+dependencies = [
+ "fish-api",
+ "log",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -16,6 +16,7 @@ pub mod client;
 pub mod command;
 pub mod event;
 pub mod game;
+pub mod game_rule;
 pub mod loader;
 pub mod networking;
 pub mod registry;
@@ -55,3 +56,5 @@ pub fn __attach_for_tests(host: *const abi::FishHostV1) {
 mod fake;
 #[cfg(test)]
 mod fake_client;
+#[cfg(test)]
+mod fake_rules;

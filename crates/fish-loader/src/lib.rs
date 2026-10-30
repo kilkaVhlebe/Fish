@@ -19,6 +19,8 @@ mod commands;
 mod discovery;
 mod dispatch;
 pub mod edition;
+mod gamerule_services;
+mod gamerules;
 mod handles;
 mod host;
 mod inner;

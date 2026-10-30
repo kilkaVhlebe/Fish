@@ -10,8 +10,8 @@ use fish_abi::debug::DebugPayload;
 use fish_abi::game::{EVENTS, GamePayload};
 use fish_abi::{ActionResult, COMBINE_FIRST_NON_PASS, COMBINE_NOTIFY, FishHandle, FishStr};
 use fish_hooks::{
-    ClientView, CommandOutcome, CommandSource, Dispatch, GameEvent, HudView, Kind, NativeModRow,
-    Outcome, Role,
+    ClientView, CommandOutcome, CommandSource, Dispatch, GameEvent, GameRuleDef, HudView, Kind,
+    NativeModRow, Outcome, Role, RuleValue,
 };
 
 use crate::boot::Loader;
@@ -56,7 +56,7 @@ struct Deferred {
 }
 
 /// The events every loader defines for the client hooks, with their combine modes.
-pub(crate) const HOST_EVENTS: [(&str, u8); 11] = [
+pub(crate) const HOST_EVENTS: [(&str, u8); 12] = [
     (ids::CLIENT_START_TICK, COMBINE_NOTIFY),
     (ids::CLIENT_END_TICK, COMBINE_NOTIFY),
     (ids::SERVER_START_TICK, COMBINE_NOTIFY),
@@ -68,6 +68,7 @@ pub(crate) const HOST_EVENTS: [(&str, u8); 11] = [
     (fish_abi::commands::ids::REGISTER, COMBINE_NOTIFY),
     (fish_abi::commands::ids::REGISTER_CLIENT, COMBINE_NOTIFY),
     (fish_abi::debug::F3_LINES, COMBINE_NOTIFY),
+    (fish_abi::gamerules::CHANGED, COMBINE_NOTIFY),
 ];
 
 /// A shorter-lived copy of an optional game borrow.
@@ -661,6 +662,55 @@ impl Dispatch for LoaderDispatch {
                 };
             });
         });
+    }
+
+    fn game_rules(&self, out: &mut Vec<GameRuleDef>) {
+        quiet((), || {
+            out.extend(
+                self.loader
+                    .inner
+                    .rules
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .defs(),
+            );
+        });
+    }
+
+    fn game_rule_get(&self, world: &str, name: &str) -> Option<RuleValue> {
+        quiet(None, || {
+            self.loader
+                .inner
+                .rules
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(Some(world), name)
+        })
+    }
+
+    fn game_rule_set(
+        &self,
+        world: &str,
+        name: &str,
+        value: &RuleValue,
+    ) -> Result<RuleValue, String> {
+        quiet(
+            Err("a Fish game rule listener panicked".to_string()),
+            || {
+                self.loader
+                    .inner
+                    .rules_set(world, name, value)
+                    .map_err(|e| e.message().to_string())
+            },
+        )
+    }
+
+    fn game_rules_load(&self, world: &str) {
+        quiet((), || self.loader.inner.rules_load(world));
+    }
+
+    fn game_rules_save(&self, world: &str) {
+        quiet((), || self.loader.inner.rules_save(world));
     }
 
     fn list_mods(&self, rows: &mut Vec<NativeModRow>) {

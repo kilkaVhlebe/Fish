@@ -9,9 +9,19 @@
 //! stopped = ["panicky"]              # mods that must have failed
 //! ```
 //!
-//! Unknown keys are errors. Within a step the actions run in a fixed order: `key`, `command`,
-//! `chat`, the game events, `ticks`, `server_ticks`, `frames`; then `expect` is checked. Later phases add keys.
+//! Unknown keys are errors. Within a step the actions run in a fixed order: `world`, `gamerule`, `key`,
+//! `command`, `chat`, the game events, `ticks`, `server_ticks`, `frames`; then `expect` is checked.
+//! Later phases add keys.
+//!
+//! ```toml
+//! [[step]]
+//! gamerule = { name = "mymod:limit", value = 4 }   # /gamerule in the current world
+//! world = "other"                                  # saves this world's rules, opens another
+//! [step.expect]
+//! gamerules = { "mymod:limit" = 8 }                # values in the current world
+//! ```
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use serde::Deserialize;
@@ -30,9 +40,12 @@ pub struct KeyStep {
 }
 
 /// What must hold after a step.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Expect {
+    /// Fish game rules and the values they must have in the current world (`name = value`).
+    #[serde(default)]
+    pub gamerules: BTreeMap<String, toml::Value>,
     /// Substrings that must appear in log messages (all mods, since boot).
     #[serde(default)]
     pub logs: Vec<String>,
@@ -206,6 +219,16 @@ pub struct EventStep {
     pub is_client: bool,
 }
 
+/// `/gamerule <name> <value>` typed for a Fish rule in the current world.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GameRuleStep {
+    /// The rule, `namespace:path`.
+    pub name: String,
+    /// The value: a boolean, number or string; absent queries the rule.
+    pub value: Option<toml::Value>,
+}
+
 /// One step of a script.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -220,6 +243,11 @@ pub struct Step {
     pub command: Option<String>,
     /// A chat message the player sends.
     pub chat: Option<String>,
+    /// Opens the world of that name (a folder in `saves/`): the open world's rules are saved and the
+    /// new one's read from its folder.
+    pub world: Option<String>,
+    /// `/gamerule` for a Fish rule in the current world.
+    pub gamerule: Option<GameRuleStep>,
     /// A key event.
     pub key: Option<KeyStep>,
     /// A player joins (name).
@@ -381,10 +409,91 @@ fn game_actions(host: &mut TestHost, step: &Step) {
     }
 }
 
+/// A TOML scalar as the text a `/gamerule` argument would have.
+fn scalar_text(v: &toml::Value) -> Option<String> {
+    match v {
+        toml::Value::Boolean(b) => Some(b.to_string()),
+        toml::Value::Integer(i) => Some(i.to_string()),
+        toml::Value::Float(f) => Some(f.to_string()),
+        toml::Value::String(s) => Some(s.clone()),
+        _ => None,
+    }
+}
+
+/// Checks `expect.gamerules` for one rule.
+fn check_gamerule(
+    host: &TestHost,
+    step: usize,
+    name: &str,
+    want: &toml::Value,
+) -> Option<ScriptFailure> {
+    let failure = |expected: String, actual: String| ScriptFailure {
+        step,
+        what: "expect.gamerules".to_string(),
+        expected,
+        actual,
+    };
+    let Some(def) = host.game_rule_defs().into_iter().find(|d| d.name == name) else {
+        return Some(failure(
+            format!("a game rule named {name}"),
+            "no mod registered it".to_string(),
+        ));
+    };
+    let Some(text) = scalar_text(want) else {
+        return Some(failure(
+            format!("{name} to be a boolean, number or string"),
+            format!("{want:?}"),
+        ));
+    };
+    let wanted = match def.parse(&text) {
+        Ok(v) => v,
+        Err(why) => return Some(failure(format!("{name} = {text}"), why)),
+    };
+    let actual = host.game_rule(name);
+    (actual.as_ref() != Some(&wanted)).then(|| {
+        failure(
+            format!("{name} = {wanted}"),
+            actual.map_or_else(|| "unknown".to_string(), |v| format!("{name} = {v}")),
+        )
+    })
+}
+
 /// Runs `script` against a booted host; returns the first failure.
 pub fn run(host: &mut TestHost, script: &Script) -> Result<(), ScriptFailure> {
     for (i, step) in script.steps.iter().enumerate() {
         let n = i + 1;
+        if let Some(w) = &step.world {
+            host.switch_world(w);
+        }
+        if let Some(g) = &step.gamerule {
+            let text = match g.value.as_ref().map(scalar_text) {
+                None => None,
+                Some(Some(t)) => Some(t),
+                Some(None) => {
+                    return Err(ScriptFailure {
+                        step: n,
+                        what: "gamerule".to_string(),
+                        expected: "a boolean, number or string value".to_string(),
+                        actual: format!("{:?}", g.value),
+                    });
+                }
+            };
+            if host.gamerule(&g.name, text.as_deref()).is_none() {
+                return Err(ScriptFailure {
+                    step: n,
+                    what: "gamerule".to_string(),
+                    expected: format!("an open world and a Fish rule named {}", g.name),
+                    actual: format!(
+                        "world {:?}, rules {:?}",
+                        host.sim.world,
+                        host.game_rule_defs()
+                            .into_iter()
+                            .map(|d| d.name)
+                            .collect::<Vec<_>>()
+                    ),
+                });
+            }
+        }
         if let Some(k) = &step.key {
             host.key(&k.name, k.pressed);
         }
@@ -475,6 +584,11 @@ pub fn run(host: &mut TestHost, script: &Script) -> Result<(), ScriptFailure> {
                 actual: host.sim.last_outcome.clone(),
             });
         }
+        for (name, want) in &expect.gamerules {
+            if let Some(failure) = check_gamerule(host, n, name, want) {
+                return Err(failure);
+            }
+        }
         for id in &expect.stopped {
             let state = host.state(id);
             if !matches!(state, Some(ModState::Failed(_))) {
@@ -557,5 +671,41 @@ stopped = ["e"]
             f.to_string(),
             "step 3: expect.logs failed\n  expected: x\n  actual:   y"
         );
+    }
+}
+
+#[cfg(test)]
+mod gamerule_keys {
+    use super::*;
+
+    #[test]
+    fn world_and_gamerule_keys_parse_scalars_of_every_type() {
+        let s = parse(
+            r#"
+[[step]]
+world = "other"
+gamerule = { name = "m:r", value = 2.5 }
+[step.expect]
+gamerules = { "m:a" = true, "m:b" = 3, "m:c" = 1.5, "m:d" = "hard" }
+"#,
+        )
+        .unwrap();
+        let step = &s.steps[0];
+        assert_eq!(step.world.as_deref(), Some("other"));
+        assert_eq!(step.gamerule.as_ref().unwrap().name, "m:r");
+        let expect = step.expect.as_ref().unwrap();
+        let texts: Vec<Option<String>> = expect.gamerules.values().map(scalar_text).collect();
+        assert_eq!(
+            texts,
+            [
+                Some("true".to_string()),
+                Some("3".to_string()),
+                Some("1.5".to_string()),
+                Some("hard".to_string())
+            ]
+        );
+        assert_eq!(scalar_text(&toml::Value::Array(vec![])), None);
+        assert!(parse("[[step]]\ngamerule = { value = 1 }").is_err());
+        assert!(parse("[[step]]\ngamerule = { name = \"a:b\", bogus = 1 }").is_err());
     }
 }

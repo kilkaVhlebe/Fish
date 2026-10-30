@@ -87,6 +87,12 @@ exact point, the event is **approximated**; the notes say how.
 | commands | `commands::run_command` | the root is checked against vanilla's dispatcher; chat tab-completion of Fish commands is not wired |
 | F3 lines | RETURN `debug_overlay::Displayer::columns` | right column |
 | crash details | `crash::set_detail` from boot, every 100 ticks and at server stop | extra lines in **System Details**, not a separate section |
+| game rules in the command tree | RETURN `horizon_command::vanilla::build_with` | the Fish rules become literals under `gamerule` (a boolean or number argument, or one literal per enum choice); the tree is built on first use, after Fish booted; `horizon-command` gets `fish-hooks` as a dependency |
+| `/gamerule` of a Fish rule | cancellable HEAD `Game::cmd_gamerule` | queries and sets through `Dispatch::game_rule_*` in the world's folder; also serves LAN guests' commands; vanilla rules and unknown names fall through |
+| game rules read | HEAD `Game::load_world_state` | `Dispatch::game_rules_load` reads `data/fish/game_rules.json` |
+| game rules saved | HEAD `Game::save_game_metadata` | `Dispatch::game_rules_save`; `save_world_state` has an opaque macro, its caller does not |
+| the world of a game | `ClientView::world_id` (the bundle's views) | the folder of `world_root`, `None` without one (remote server); the loader makes it the thread's world while an event runs, which is what a mod's `get`/`set` act on |
+| Game Rules screen | **patch** `0005-gamerule-screen.patch` | `RulesScreen::with_fish` adds the rows of the in-world screen; its state is private, so no hook can |
 
 A derived event whose own listeners are missing still raises its base event when a derived listener exists (a mod that
 listens only to `modify_send` still gets called).
