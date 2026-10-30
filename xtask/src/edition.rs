@@ -648,6 +648,50 @@ pub fn verify_gamerule_log(log: &str) -> Result<()> {
     Ok(())
 }
 
+/// The `content_demo` lines of `log` that contain every needle, or the first missing one.
+fn content_demo_lines(log: &str, needles: &[&str]) -> Result<()> {
+    for needle in needles {
+        if !log
+            .lines()
+            .any(|l| l.contains("[fish/content_demo]") && l.contains(needle))
+        {
+            bail!("latest.log has no `[fish/content_demo] ... {needle} ...` line");
+        }
+    }
+    Ok(())
+}
+
+/// Checks what the `content_demo` mod logged during the e2e scenarios: the state ids Horizon gave
+/// its block, the late registration refusal, and the use, place and break of the ruby block.
+pub fn verify_blocks_log(log: &str) -> Result<()> {
+    content_demo_lines(
+        log,
+        &[
+            "ruby states ",
+            "late block refused: invalid argument: registries are frozen",
+            "ruby block used at",
+            "ruby block placed at",
+            "ruby block broken at",
+        ],
+    )?;
+    if log
+        .lines()
+        .any(|l| l.contains("[fish/content_demo]") && l.contains("ruby states unknown"))
+    {
+        bail!("the loader did not learn the state ids of the ruby block");
+    }
+    Ok(())
+}
+
+/// What the second run of the e2e world logged: the ruby block still has its state ids.
+pub fn verify_blocks_reload_log(log: &str) -> Result<()> {
+    content_demo_lines(log, &["ruby states "])?;
+    if log.lines().any(|l| l.contains("ruby states unknown")) {
+        bail!("the loader did not learn the state ids of the ruby block after the reload");
+    }
+    Ok(())
+}
+
 /// Checks what the `events_demo` mod logged during the e2e scenarios: the lifecycle and join events,
 /// the chat filter and rewrite, the block-break veto and the data reload.
 pub fn verify_events_log(log: &str) -> Result<()> {
@@ -801,45 +845,16 @@ pub fn e2e(
     let hello = build_hello(root)?;
     let demo = build_example_mod(root, "events-demo", "events_demo-0.1.0.fish")?;
     let rules = build_example_mod(root, "gamerule-demo", "gamerule_demo-0.1.0.fish")?;
-    let mods = std::env::join_paths([&hello, &demo, &rules]).context("joining the mod paths")?;
+    let content = build_example_mod(root, "content-demo", "content_demo-0.1.0.fish")?;
+    let mods =
+        std::env::join_paths([&hello, &demo, &rules, &content]).context("joining the mod paths")?;
     let scratch = root.join("target/e2e");
     if scratch.exists() {
         fs::remove_dir_all(&scratch)?;
     }
     let home = scratch.join("home");
     fs::create_dir_all(&home)?;
-    // --no-pause: the game stops ticking when its window loses focus, and nothing here focuses it.
-    let mut launch_cmd = Command::new(horizon_ctl);
-    launch_cmd
-        .args(["launch", "--game"])
-        .arg(&game)
-        .args([
-            "--world",
-            "FishE2E",
-            "--creative",
-            "--offscreen",
-            "--wait",
-            "--resources",
-        ])
-        .arg(resources)
-        .arg("--no-pause")
-        // The game keeps its saves and options in its working directory: the scratch one, so a
-        // run always starts a fresh world and leaves the repository alone.
-        .current_dir(&scratch)
-        .env("HORIZON_HOME", &home)
-        .env("FISH_LOADER_ADD_MODS", &mods);
-    let launched = output_within(launch_cmd, 600).and_then(|out| {
-        if out.status.success() {
-            Ok(())
-        } else {
-            bail!(
-                "horizon-ctl launch failed ({}):\n{}{}",
-                out.status,
-                String::from_utf8_lossy(&out.stdout),
-                String::from_utf8_lossy(&out.stderr)
-            )
-        }
-    });
+    let launched = launch_game(horizon_ctl, &game, &scratch, resources, &mods);
     let outcome = launched.and_then(|()| {
         ctl(horizon_ctl, &home, &["wait", "200"])?;
         ctl(horizon_ctl, &home, &["command", "fish hello"])?;
@@ -891,6 +906,42 @@ pub fn e2e(
         if !mode.contains("hard") {
             bail!("`/gamerule gamerule_demo:difficulty_mode hard` did not confirm: {mode}");
         }
+        // A block of a mod in the ground under the player (looking straight down): set in the
+        // world (the game knows its id), used with a right click, placed from its item next to
+        // it and broken; the mod logs each.
+        ctl(horizon_ctl, &home, &["look", "0", "90"])?;
+        ctl(horizon_ctl, &home, &["wait", "5"])?;
+        let state: serde_json::Value = serde_json::from_str(&ctl(horizon_ctl, &home, &["state"])?)
+            .context("parsing horizon-ctl state")?;
+        let ruby_at =
+            block_ahead(&state["player"], 2.0).context("the player's eye and view in `state`")?;
+        let [x, y, z] = ruby_at.map(|c| c.to_string());
+        let ruby = "content_demo:ruby_block";
+        let setblock = |at: [String; 3], block: &str| {
+            let line = format!("setblock {} {} {} {block}", at[0], at[1], at[2]);
+            ctl(horizon_ctl, &home, &["command", &line])
+        };
+        setblock([x.clone(), y.clone(), z.clone()], ruby)?;
+        ctl(horizon_ctl, &home, &["wait", "5"])?;
+        let seen = ctl(horizon_ctl, &home, &["block", &x, &y, &z])?;
+        if !seen.contains(ruby) {
+            bail!("`/setblock {x} {y} {z} {ruby}` did not put the block there: {seen}");
+        }
+        ctl(horizon_ctl, &home, &["interact", &x, &y, &z])?;
+        ctl(horizon_ctl, &home, &["wait", "5"])?;
+        // Next to it: firm ground and free air above it, for the item to be placed on.
+        let (east, above) = ((ruby_at[0] + 1).to_string(), (ruby_at[1] + 1).to_string());
+        setblock([east.clone(), y.clone(), z.clone()], "minecraft:stone")?;
+        setblock([east.clone(), above.clone(), z.clone()], "minecraft:air")?;
+        ctl(horizon_ctl, &home, &["command", &format!("give @s {ruby}")])?;
+        ctl(
+            horizon_ctl,
+            &home,
+            &["place", &east, &above, &z, "--item", ruby],
+        )?;
+        ctl(horizon_ctl, &home, &["wait", "5"])?;
+        ctl(horizon_ctl, &home, &["break", &east, &above, &z])?;
+        ctl(horizon_ctl, &home, &["wait", "10"])?;
         ctl(horizon_ctl, &home, &["wait", "5"])?;
         // A data reload, then the F3 screen (it lists `events-demo is listening`) for the screenshot.
         ctl(horizon_ctl, &home, &["command", "reload"])?;
@@ -907,23 +958,88 @@ pub fn e2e(
         verify_e2e_log(&log)?;
         verify_events_log(&log)?;
         verify_gamerule_log(&log)?;
+        verify_blocks_log(&log)?;
         if !shot.is_file() {
             bail!("no screenshot was written to {}", shot.display());
         }
-        Ok(())
+        Ok(ruby_at)
     });
     // Whatever happened, do not leave a game window open; a clean quit logs the shutdown events.
     let _ = ctl(horizon_ctl, &home, &["quit"]);
-    outcome.and_then(|()| {
-        for _ in 0..40 {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            let log = fs::read_to_string(home.join("logs/latest.log")).unwrap_or_default();
-            if log.contains("client stopped") {
-                return verify_shutdown_log(&log);
-            }
+    let ruby_at = outcome.and_then(|at| {
+        verify_shutdown_log(&wait_for_stop(&home)?)?;
+        Ok(at)
+    })?;
+    // The world was saved with the ruby block in it: a second run opens it again.
+    launch_game(horizon_ctl, &game, &scratch, resources, &mods)?;
+    let reopened = ctl(horizon_ctl, &home, &["wait", "100"]).and_then(|_| {
+        let at = ruby_at.map(|c| c.to_string());
+        let block = ctl(horizon_ctl, &home, &["block", &at[0], &at[1], &at[2]])?;
+        if !block.contains("content_demo:ruby_block") {
+            bail!(
+                "the saved world lost the ruby block at {}: {block}",
+                at.join(" ")
+            );
         }
-        bail!("the game did not log `client stopped` after quit")
-    })
+        let log = fs::read_to_string(home.join("logs/latest.log")).context("reading latest.log")?;
+        verify_blocks_reload_log(&log)
+    });
+    let _ = ctl(horizon_ctl, &home, &["quit"]);
+    let _ = wait_for_stop(&home);
+    reopened
+}
+
+/// Waits for the game to log `client stopped` (a clean quit) and returns its log.
+fn wait_for_stop(home: &Path) -> Result<String> {
+    for _ in 0..40 {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let log = fs::read_to_string(home.join("logs/latest.log")).unwrap_or_default();
+        if log.contains("client stopped") {
+            return Ok(log);
+        }
+    }
+    bail!("the game did not log `client stopped` after quit")
+}
+
+/// Launches the edition (`horizon-ctl launch`) in `scratch` with `mods` and waits for its world.
+fn launch_game(
+    horizon_ctl: &Path,
+    game: &Path,
+    scratch: &Path,
+    resources: &Path,
+    mods: &std::ffi::OsStr,
+) -> Result<()> {
+    let home = scratch.join("home");
+    // --no-pause: the game stops ticking when its window loses focus, and nothing here focuses it.
+    let mut launch_cmd = Command::new(horizon_ctl);
+    launch_cmd
+        .args(["launch", "--game"])
+        .arg(game)
+        .args([
+            "--world",
+            "FishE2E",
+            "--creative",
+            "--offscreen",
+            "--wait",
+            "--resources",
+        ])
+        .arg(resources)
+        .arg("--no-pause")
+        // The game keeps its saves and options in its working directory: the scratch one, so a
+        // run always starts a fresh world and leaves the repository alone.
+        .current_dir(scratch)
+        .env("HORIZON_HOME", &home)
+        .env("FISH_LOADER_ADD_MODS", mods);
+    let out = output_within(launch_cmd, 600)?;
+    if !out.status.success() {
+        bail!(
+            "horizon-ctl launch failed ({}):\n{}{}",
+            out.status,
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1108,6 +1224,30 @@ mod tests {
         // another mod's line does not count
         let other = log.replace("gamerule_demo", "other");
         assert!(verify_gamerule_log(&other).is_err());
+    }
+
+    #[test]
+    fn blocks_log_expectations() {
+        let line = |s: &str| format!("[12:00:00] [Server thread/INFO]: [fish/content_demo] {s}\n");
+        let mut log = line("ruby states 35724..35725");
+        log += &line("late block refused: invalid argument: registries are frozen");
+        log += &line("ruby block used at 1 2 3 by Steve face Some(Up)");
+        log += &line("ruby block placed at 1 3 3");
+        assert!(
+            verify_blocks_log(&log)
+                .unwrap_err()
+                .to_string()
+                .contains("ruby block broken at")
+        );
+        log += &line("ruby block broken at 1 3 3");
+        assert!(verify_blocks_log(&log).is_ok());
+        assert!(verify_blocks_log(&log.replace("content_demo", "other")).is_err());
+        // the second run only needs the state ids again
+        assert!(verify_blocks_reload_log(&line("ruby states 35724..35725")).is_ok());
+        assert!(verify_blocks_reload_log("").is_err());
+        let unknown = line("ruby states unknown: not found");
+        assert!(verify_blocks_reload_log(&unknown).is_err());
+        assert!(verify_blocks_log(&(log + &unknown)).is_err());
     }
 
     #[test]

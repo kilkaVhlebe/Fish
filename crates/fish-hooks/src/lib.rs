@@ -123,6 +123,152 @@ pub struct NativeModRow {
     pub keys: Vec<[String; 3]>,
 }
 
+/// A block a mod registered (`fish:block`): a vanilla template and what differs from it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockDef {
+    /// The block's id, `namespace:path`; the namespace is the registering mod's id.
+    pub id: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+    /// The vanilla block it copies: behaviour class, state properties and shapes.
+    pub template: String,
+    /// Seconds of hand mining (`-1`: unbreakable).
+    pub hardness: Option<f32>,
+    /// Explosion resistance.
+    pub resistance: Option<f32>,
+    /// Light emitted, 0 to 15.
+    pub light: Option<u8>,
+    /// Whether the right tool is needed for drops.
+    pub requires_tool: Option<bool>,
+    /// Friction, 0 to 2.
+    pub friction: Option<f32>,
+    /// A map colour id, 0 to 61.
+    pub map_color: Option<u8>,
+    /// The vanilla block whose sounds it uses.
+    pub sounds: Option<String>,
+    /// The events its mod handles: bit `1 << n` for the `n`th [`BlockEventKind`].
+    pub events: u32,
+}
+
+/// The states Horizon gave one block: `first..first + count` (a block's states are one run).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockRun {
+    /// The block's id.
+    pub block: String,
+    /// Its first state id.
+    pub first: u32,
+    /// How many states it has.
+    pub count: u32,
+}
+
+/// Groups block states (id, block name) in registry order into one [`BlockRun`] per block that is
+/// not a vanilla one: what content mods added. A block whose states are not one run, or that
+/// appears twice, is reported once per run.
+pub fn block_runs<'a>(states: impl IntoIterator<Item = (u32, &'a str)>) -> Vec<BlockRun> {
+    let mut runs: Vec<BlockRun> = Vec::new();
+    for (id, name) in states {
+        if name.starts_with("minecraft:") {
+            continue;
+        }
+        match runs.last_mut() {
+            Some(run) if run.block == name && run.first + run.count == id => run.count += 1,
+            _ => runs.push(BlockRun {
+                block: name.to_string(),
+                first: id,
+                count: 1,
+            }),
+        }
+    }
+    runs
+}
+
+/// What happened to a Fish block, for [`Dispatch::block_event`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockEventKind {
+    /// A player used the block.
+    Use,
+    /// A player placed the block.
+    Place,
+    /// A player broke the block.
+    Broken,
+    /// A neighbour of the block changed.
+    NeighborChanged,
+    /// A random tick picked the block.
+    RandomTick,
+    /// A scheduled tick of the block ran.
+    ScheduledTick,
+}
+
+impl BlockEventKind {
+    /// Every kind, in the order of the `fish:block` event numbers.
+    pub const ALL: [BlockEventKind; 6] = [
+        BlockEventKind::Use,
+        BlockEventKind::Place,
+        BlockEventKind::Broken,
+        BlockEventKind::NeighborChanged,
+        BlockEventKind::RandomTick,
+        BlockEventKind::ScheduledTick,
+    ];
+
+    /// The event's name (`use`, `neighbor_changed`).
+    pub fn name(self) -> &'static str {
+        match self {
+            BlockEventKind::Use => "use",
+            BlockEventKind::Place => "place",
+            BlockEventKind::Broken => "broken",
+            BlockEventKind::NeighborChanged => "neighbor_changed",
+            BlockEventKind::RandomTick => "random_tick",
+            BlockEventKind::ScheduledTick => "scheduled_tick",
+        }
+    }
+}
+
+/// An event of a block, found by its state id.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockEvent<'a> {
+    /// What happened.
+    pub kind: BlockEventKind,
+    /// The block state's id in the game.
+    pub state: u32,
+    /// The block's position.
+    pub pos: [i32; 3],
+    /// The neighbour that changed ([`BlockEventKind::NeighborChanged`]).
+    pub other_pos: [i32; 3],
+    /// The face clicked, `0..=5` (down, up, north, south, west, east), or 255.
+    pub face: u8,
+    /// The hand used: 0 main, 1 off.
+    pub hand: u8,
+    /// Which game raised it.
+    pub role: Role,
+    /// The acting player's name, empty when there is none.
+    pub actor: &'a str,
+    /// The acting player's UUID bytes.
+    pub actor_uuid: [u8; 16],
+    /// The dimension id.
+    pub dimension: &'a str,
+    /// The item in the acting hand, empty when there is none.
+    pub item: &'a str,
+}
+
+impl<'a> BlockEvent<'a> {
+    /// An event of `kind` for the block state `state` at `pos`, with the rest left empty.
+    pub fn new(kind: BlockEventKind, state: u32, pos: [i32; 3]) -> BlockEvent<'a> {
+        BlockEvent {
+            kind,
+            state,
+            pos,
+            other_pos: [0; 3],
+            face: 255,
+            hand: 0,
+            role: Role::Window,
+            actor: "",
+            actor_uuid: [0; 16],
+            dimension: "minecraft:overworld",
+            item: "",
+        }
+    }
+}
+
 /// The type of a Fish game rule, with its bounds.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuleKind {
@@ -698,6 +844,28 @@ pub trait Dispatch: Send + Sync {
     fn game_rules_load(&self, _world: &str) {}
     /// A world is being saved: writes its Fish rule values beside the game's own.
     fn game_rules_save(&self, _world: &str) {}
+    /// The blocks mods registered, in registration order.
+    fn blocks(&self, _out: &mut Vec<BlockDef>) {}
+    /// Writes what Horizon needs to know about the Fish blocks as content mods (one folder per mod
+    /// that registered blocks: manifest, block declarations and the mod's own assets, written
+    /// only when they changed) and returns the folders. Called while the game builds its resource
+    /// root, once, before any world loads.
+    fn block_content(&self) -> Vec<PathBuf> {
+        Vec::new()
+    }
+    /// Horizon built its block states: `runs` holds one run per block content mods added. The
+    /// loader keeps the ranges of the Fish blocks among them and finds a block by state id.
+    fn blocks_built(&self, _runs: &[BlockRun]) {}
+    /// True when `state` is one of a Fish block's states (cheap: hot paths ask before building
+    /// an event).
+    fn is_block_state(&self, _state: u32) -> bool {
+        false
+    }
+    /// An event of the Fish block that owns `event.state`. Only [`BlockEventKind::Use`] decides:
+    /// [`Outcome::Handled`] or [`Outcome::Cancel`] end the click.
+    fn block_event(&self, _game: Option<&mut dyn ClientView>, _event: &BlockEvent<'_>) -> Outcome {
+        Outcome::Pass
+    }
 }
 
 /// What `/gamerule <fish rule> [<value>]` did, for the game (and the simulation) to word.
@@ -789,6 +957,22 @@ pub fn game_rule_command(
 }
 
 static DISPATCH: OnceLock<&'static dyn Dispatch> = OnceLock::new();
+
+thread_local! {
+    static CONTEXT: std::cell::Cell<(Role, &'static str)> =
+        const { std::cell::Cell::new((Role::Window, "minecraft:overworld")) };
+}
+
+/// Notes which game ticks on this thread (the bridge calls it every tick): what a hook that has
+/// no game at hand (the block simulation) reports as the event's role and dimension.
+pub fn note_thread_context(role: Role, dimension: &'static str) {
+    CONTEXT.with(|c| c.set((role, dimension)));
+}
+
+/// The role and dimension [`note_thread_context`] last noted on this thread.
+pub fn thread_context() -> (Role, &'static str) {
+    CONTEXT.with(std::cell::Cell::get)
+}
 
 /// Installs the dispatcher; returns false if one is already installed.
 pub fn install(dispatch: &'static dyn Dispatch) -> bool {
@@ -898,6 +1082,14 @@ mod tests {
         assert!(d.game_rule_set("w", "a:b", &RuleValue::Bool(true)).is_err());
         d.game_rules_load("w");
         d.game_rules_save("w");
+        let mut blocks = Vec::new();
+        d.blocks(&mut blocks);
+        assert!(blocks.is_empty());
+        assert!(d.block_content().is_empty());
+        d.blocks_built(&[]);
+        assert!(!d.is_block_state(40_000));
+        let event = BlockEvent::new(BlockEventKind::Use, 40_000, [1, 2, 3]);
+        assert_eq!(d.block_event(None, &event), Outcome::Pass);
         assert_eq!(v.world_id(), None);
     }
 
@@ -1079,5 +1271,64 @@ mod tests {
         );
         assert_eq!(rule_result(&double, &RuleValue::Double(2.5)), 2);
         assert_eq!(rule_result(&double, &RuleValue::Text("x".into())), 0);
+    }
+
+    #[test]
+    fn block_runs_group_the_states_content_mods_added() {
+        let states = [
+            (0, "minecraft:air"),
+            (1, "minecraft:stone"),
+            (2, "ruby:ruby_block"),
+            (3, "ruby:ruby_slab"),
+            (4, "ruby:ruby_slab"),
+            (6, "ruby:ruby_slab"),
+            (7, "other:thing"),
+        ];
+        let run = |block: &str, first, count| BlockRun {
+            block: block.into(),
+            first,
+            count,
+        };
+        assert_eq!(
+            block_runs(states),
+            vec![
+                run("ruby:ruby_block", 2, 1),
+                run("ruby:ruby_slab", 3, 2),
+                run("ruby:ruby_slab", 6, 1),
+                run("other:thing", 7, 1),
+            ]
+        );
+        assert!(block_runs([(0, "minecraft:air")]).is_empty());
+    }
+
+    #[test]
+    fn block_events_have_names_and_defaults() {
+        let names: Vec<&str> = BlockEventKind::ALL.iter().map(|k| k.name()).collect();
+        assert_eq!(
+            names,
+            [
+                "use",
+                "place",
+                "broken",
+                "neighbor_changed",
+                "random_tick",
+                "scheduled_tick"
+            ]
+        );
+        let e = BlockEvent::new(BlockEventKind::Place, 9, [4, 5, 6]);
+        assert_eq!((e.state, e.pos, e.face, e.hand), (9, [4, 5, 6], 255, 0));
+        assert_eq!(e.dimension, "minecraft:overworld");
+    }
+
+    #[test]
+    fn the_thread_context_is_per_thread() {
+        assert_eq!(thread_context(), (Role::Window, "minecraft:overworld"));
+        note_thread_context(Role::IntegratedServer, "minecraft:the_nether");
+        assert_eq!(
+            thread_context(),
+            (Role::IntegratedServer, "minecraft:the_nether")
+        );
+        let other = std::thread::spawn(thread_context).join().unwrap();
+        assert_eq!(other, (Role::Window, "minecraft:overworld"));
     }
 }

@@ -259,6 +259,10 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             fish_abi::gamerules::SERVICE_GAME_RULE,
             std::ptr::from_ref(&crate::gamerule_services::GAME_RULE) as usize,
         ),
+        (
+            fish_abi::blocks::SERVICE_BLOCK,
+            std::ptr::from_ref(&crate::block_services::BLOCK) as usize,
+        ),
     ] {
         inner.services.write().expect("services").insert(
             id.to_string(),
@@ -366,7 +370,6 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             Err(msg) => inner.fail_mod(rec.token, msg, false),
         }
     }
-    drop(archives);
 
     // Entrypoints: all pre_launch, then all main, then client/server.
     let side_key = match cfg.side {
@@ -379,6 +382,8 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             run_entrypoints(&inner, rec, key);
         }
     }
+    inner.keep_block_archives(&mut archives);
+    drop(archives);
     for rec in active {
         let mut state = rec.state.lock().expect("mod state");
         if *state == ModState::Loading {

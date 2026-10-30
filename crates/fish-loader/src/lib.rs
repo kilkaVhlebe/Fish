@@ -11,6 +11,8 @@
 
 #![deny(missing_docs)]
 
+mod block_services;
+mod blocks;
 mod boot;
 mod bus;
 mod client_services;

@@ -7,6 +7,7 @@
 
 #![deny(missing_docs)]
 
+pub mod blocks;
 pub mod events;
 pub mod gamerules;
 pub mod net;
@@ -116,6 +117,7 @@ impl TestHost {
         dispatch.enable_trace();
         self.dispatch = Some(dispatch);
         self.loader = Some(loader);
+        self.build_blocks();
         Ok(self)
     }
 
@@ -365,9 +367,11 @@ pub fn pack_example(package: &str, manifest_text: &str, out_name: &str) -> PathB
         .into_owned();
     spec.add_file(&format!("bin/{}/{file}", fish_pack::platform()), &library)
         .expect("add library");
-    let assets = root.join("examples/mods").join(package).join("assets");
-    if assets.is_dir() {
-        spec.add_dir("assets", &assets).expect("add assets");
+    for dir in ["assets", "data"] {
+        let path = root.join("examples/mods").join(package).join(dir);
+        if path.is_dir() {
+            spec.add_dir(dir, &path).expect("add resources");
+        }
     }
     let out = target.join("packed").join(format!("{out_name}.fish"));
     fish_pack::write(spec, &out).expect("write .fish");

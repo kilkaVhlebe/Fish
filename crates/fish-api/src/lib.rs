@@ -12,6 +12,7 @@
 
 #![deny(missing_docs)]
 
+pub mod block;
 pub mod client;
 pub mod command;
 pub mod event;
@@ -54,6 +55,8 @@ pub fn __attach_for_tests(host: *const abi::FishHostV1) {
 
 #[cfg(test)]
 mod fake;
+#[cfg(test)]
+mod fake_blocks;
 #[cfg(test)]
 mod fake_client;
 #[cfg(test)]

@@ -16,6 +16,7 @@
 #![no_std]
 #![deny(missing_docs)]
 
+pub mod blocks;
 pub mod client;
 pub mod commands;
 pub mod debug;

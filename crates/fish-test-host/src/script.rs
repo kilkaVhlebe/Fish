@@ -20,6 +20,22 @@
 //! [step.expect]
 //! gamerules = { "mymod:limit" = 8 }                # values in the current world
 //! ```
+//!
+//! Fish blocks live in a block world kept by the host; every block step works on it:
+//!
+//! ```toml
+//! [[step]]
+//! place_block = { pos = [1, 64, 1], block = "mymod:ruby" }   # item and actor are optional
+//! use_block = { pos = [1, 64, 1], face = "up", hand = "main", item = "" }
+//! break_block = { pos = [1, 64, 1], block = "mymod:ruby" }
+//! random_tick = { pos = [1, 64, 1] }
+//! scheduled_tick = { pos = [1, 64, 1] }
+//! [step.expect]
+//! blocks = { "1 64 1" = "air" }                      # world content
+//! block_states = { "mymod:ruby" = [35723, 1] }       # first state, count
+//! use_result = "success"                             # success, consume, fail or pass
+//! content_files = ["data/mymod/horizon/block/ruby.json"]
+//! ```
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -27,6 +43,7 @@ use std::fmt;
 use serde::Deserialize;
 
 use crate::TestHost;
+use crate::blocks;
 use fish_loader::ModState;
 
 /// A key press or release.
@@ -83,6 +100,21 @@ pub struct Expect {
     /// Substrings that must NOT appear in the event log.
     #[serde(default)]
     pub no_events: Vec<String>,
+    /// Blocks the simulated world must hold: `"x y z" = "namespace:path"` (`"air"` for none).
+    #[serde(default)]
+    pub blocks: BTreeMap<String, String>,
+    /// The states of Fish blocks: `"namespace:path" = [first, count]`.
+    #[serde(default)]
+    pub block_states: BTreeMap<String, [u32; 2]>,
+    /// The result of the step's last `use_block`: `success` or `consume` (a Fish block handled the
+    /// click), `fail` (it cancelled it) or `pass`.
+    pub use_result: Option<String>,
+    /// Files (relative to a mod's content folder) that must exist in a folder the loader wrote.
+    #[serde(default)]
+    pub content_files: Vec<String>,
+    /// Files that must not exist in any content folder.
+    #[serde(default)]
+    pub no_content_files: Vec<String>,
 }
 
 fn stone() -> String {
@@ -113,6 +145,47 @@ pub struct BlockStep {
     /// Held item id.
     #[serde(default)]
     pub item: String,
+}
+
+/// The player uses an item on a block: `pos`, the face and hand, the item and (when the simulated
+/// world holds no block there) the block.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UseStep {
+    /// Block position.
+    pub pos: [i32; 3],
+    /// Block id when the world holds none there.
+    #[serde(default = "stone")]
+    pub block: String,
+    /// Held item id.
+    #[serde(default)]
+    pub item: String,
+    /// The face clicked: `down`, `up` (default), `north`, `south`, `west` or `east`.
+    pub face: Option<String>,
+    /// The hand: `main` (default) or `off`.
+    pub hand: Option<String>,
+}
+
+/// A block the player places in the simulated world.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlaceStep {
+    /// Block position.
+    pub pos: [i32; 3],
+    /// The block id.
+    pub block: String,
+    /// The held item; defaults to the block.
+    pub item: Option<String>,
+    /// The acting player; defaults to Steve.
+    pub actor: Option<String>,
+}
+
+/// A position in the simulated world.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TickStep {
+    /// Block position.
+    pub pos: [i32; 3],
 }
 
 /// An entity target: network id and type.
@@ -255,13 +328,19 @@ pub struct Step {
     /// A player leaves (name).
     pub leave: Option<String>,
     /// The player uses an item on a block.
-    pub use_block: Option<BlockStep>,
+    pub use_block: Option<UseStep>,
     /// The player attacks a block.
     pub attack_block: Option<BlockStep>,
     /// The player attacks an entity.
     pub attack_entity: Option<EntityStep>,
     /// The player breaks a block.
     pub break_block: Option<BlockStep>,
+    /// The player places a block in the simulated world.
+    pub place_block: Option<PlaceStep>,
+    /// A random tick picks the block at a position.
+    pub random_tick: Option<TickStep>,
+    /// A scheduled tick of the block at a position runs.
+    pub scheduled_tick: Option<TickStep>,
     /// A living entity takes damage.
     pub damage: Option<EntityStep>,
     /// A living entity dies.
@@ -354,12 +433,23 @@ fn game_actions(host: &mut TestHost, step: &Step) {
     if let Some(n) = &step.leave {
         host.leave(n);
     }
+    if let Some(b) = &step.place_block {
+        let item = b.item.as_deref().unwrap_or(&b.block);
+        let actor = b.actor.as_deref().unwrap_or(crate::events::PLAYER);
+        host.place_block(b.pos, &b.block, item, actor);
+    }
     if let Some(b) = &step.use_block {
-        if b.item.is_empty() {
-            host.use_block(b.pos, &b.block, "minecraft:air");
+        let item = if b.item.is_empty() {
+            "minecraft:air"
         } else {
-            host.use_block(b.pos, &b.block, &b.item);
-        }
+            &b.item
+        };
+        let face = b.face.as_deref().map_or(Some(1), blocks::face_number);
+        let hand = b.hand.as_deref().map_or(Some(0), blocks::hand_number);
+        let (Some(face), Some(hand)) = (face, hand) else {
+            panic!("use_block: unknown face {:?} or hand {:?}", b.face, b.hand);
+        };
+        host.use_block_at(b.pos, face, hand, &b.block, item);
     }
     if let Some(b) = &step.attack_block {
         host.attack_block(b.pos, &b.block);
@@ -369,6 +459,12 @@ fn game_actions(host: &mut TestHost, step: &Step) {
     }
     if let Some(b) = &step.break_block {
         host.break_block(b.pos, &b.block);
+    }
+    if let Some(t) = &step.random_tick {
+        host.random_tick(t.pos);
+    }
+    if let Some(t) = &step.scheduled_tick {
+        host.scheduled_tick(t.pos);
     }
     if let Some(e) = &step.damage {
         host.damage(e.id, &e.kind, e.amount, &e.source);
@@ -583,6 +679,9 @@ pub fn run(host: &mut TestHost, script: &Script) -> Result<(), ScriptFailure> {
                 expected: want.clone(),
                 actual: host.sim.last_outcome.clone(),
             });
+        }
+        if let Some(failure) = host.check_blocks(n, expect) {
+            return Err(failure);
         }
         for (name, want) in &expect.gamerules {
             if let Some(failure) = check_gamerule(host, n, name, want) {

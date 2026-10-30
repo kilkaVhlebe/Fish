@@ -93,6 +93,11 @@ exact point, the event is **approximated**; the notes say how.
 | game rules saved | HEAD `Game::save_game_metadata` | `Dispatch::game_rules_save`; `save_world_state` has an opaque macro, its caller does not |
 | the world of a game | `ClientView::world_id` (the bundle's views) | the folder of `world_root`, `None` without one (remote server); the loader makes it the thread's world while an event runs, which is what a mod's `get`/`set` act on |
 | Game Rules screen | **patch** `0005-gamerule-screen.patch` | `RulesScreen::with_fish` adds the rows of the in-world screen; its state is private, so no hook can |
+| `use` (blocks of Fish) | extends the `Game::use_item` hook | blocks of Fish get `on_use` through `Dispatch::block_event` before the generic `use_block` event; `Handled` or `Cancel` ends the click |
+| `place` (blocks of Fish) | HEAD `Game::apply_item_block_state` | `Dispatch::block_event` with `Place` for blocks whose state lies in a Fish run; the call sits in the code that places a block item, a player's or a dispenser's |
+| `broken` (blocks of Fish) | HEAD `Game::break_block_as_player`, then the tick's end | **approximated**: a break that no listener vetoed is noted, and `Broken` fires at the end of the tick when the block is gone (a refused break reports nothing) |
+| `neighbor_changed`, `random_tick`, `scheduled_tick` | **patch** `0007-block-ticks.patch` on horizon-world `Sim` | the block simulation reports them to `Dispatch::block_event`; they fire for any Fish block whose template runs them |
+| content overlay | **patch** `0006-content-mods.patch` on `game/mods.rs::content_root` | adds the Fish content folders (`<game dir>/.fish/content/<mod_id>/`) as always-on content mods; the loader writes them via `Dispatch::block_content` |
 
 A derived event whose own listeners are missing still raises its base event when a derived listener exists (a mod that
 listens only to `modify_send` still gets called).

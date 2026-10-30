@@ -2,6 +2,7 @@ fn fish_break_block(game: &mut Game<'_>, pos: [i32; 3]) -> std::ops::ControlFlow
     if crate::game::fish_bridge::events::block_break_before(game, pos) {
         std::ops::ControlFlow::Break(Ok(()))
     } else {
+        crate::game::fish_bridge::blocks::break_before(game, pos);
         std::ops::ControlFlow::Continue(())
     }
 }

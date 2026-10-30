@@ -24,5 +24,6 @@
   - [Реестры](modders/registry.md)
   - [Теги](modders/tags.md)
   - [Игровые правила](modders/game_rule.md)
+  - [Блоки](modders/block.md)
 - [Инструменты](modders/tooling.md)
 - [Тестирование](modders/testing.md)

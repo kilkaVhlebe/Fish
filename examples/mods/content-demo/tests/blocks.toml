@@ -1,0 +1,98 @@
+name = "blocks: registration, state ranges, content folder, place, use, neighbours, break, ticks"
+
+# registration: states are assigned like Horizon does (blocks sorted by id), the content folder holds
+# the declarations and the mod's own resources, and a block registered late is refused
+[[step]]
+game = true
+[step.expect]
+logs = [
+  "ruby states 35724..35725",
+  "late block refused: invalid argument: registries are frozen",
+]
+block_states = { "content_demo:raw_ruby" = [35723, 1], "content_demo:ruby_block" = [35724, 1] }
+content_files = [
+  "horizon-mod.toml",
+  "data/content_demo/horizon/block/ruby_block.json",
+  "data/content_demo/horizon/block/raw_ruby.json",
+  "data/minecraft/tags/block/mineable/pickaxe.json",
+  "assets/content_demo/lang/en_us.json",
+  "assets/content_demo/textures/block/ruby_block.png",
+  "assets/content_demo/blockstates/ruby_block.json",
+  "assets/content_demo/models/block/ruby_block.json",
+  "assets/content_demo/models/item/ruby_block.json",
+  "assets/content_demo/items/ruby_block.json",
+]
+no_content_files = ["data/content_demo/horizon/block/late.json"]
+
+# vanilla blocks raise no Fish block event
+[[step]]
+place_block = { pos = [0, 64, 0], block = "minecraft:stone" }
+use_block = { pos = [0, 64, 0], item = "minecraft:stick" }
+[step.expect]
+blocks = { "0 64 0" = "minecraft:stone" }
+use_result = "pass"
+no_events = ["block/"]
+
+[[step]]
+break_block = { pos = [0, 64, 0], block = "minecraft:stone" }
+[step.expect]
+blocks = { "0 64 0" = "air" }
+broken = ["0 64 0 minecraft:stone"]
+no_events = ["block/"]
+
+# placing: the block enters the world and gets its place event
+[[step]]
+place_block = { pos = [10, 64, 10], block = "content_demo:ruby_block", actor = "Alex" }
+[step.expect]
+blocks = { "10 64 10" = "content_demo:ruby_block" }
+logs = ["ruby block placed at 10 64 10"]
+events = ["block/place pass"]
+
+# a block without behaviour is only a block
+[[step]]
+place_block = { pos = [12, 64, 10], block = "content_demo:raw_ruby" }
+[step.expect]
+blocks = { "12 64 10" = "content_demo:raw_ruby" }
+no_events = ["block/neighbor_changed"]
+
+# the Fish blocks around a placed Fish block hear about it
+[[step]]
+place_block = { pos = [9, 64, 10], block = "content_demo:ruby_block" }
+[step.expect]
+logs = [
+  "ruby block placed at 9 64 10",
+  "ruby block neighbor changed at 10 64 10 from 9 64 10",
+]
+
+# using: the block handles the click and it ends there
+[[step]]
+use_block = { pos = [10, 64, 10], face = "north", item = "minecraft:stick" }
+[step.expect]
+use_result = "success"
+outcome = "handled"
+logs = ["ruby block used at 10 64 10 by Steve face Some(North)"]
+events = ["block/use handled"]
+
+# the block raw_ruby does not handle uses: the game's own flow goes on
+[[step]]
+use_block = { pos = [12, 64, 10], item = "minecraft:stick" }
+[step.expect]
+use_result = "pass"
+
+# ticks
+[[step]]
+random_tick = { pos = [10, 64, 10] }
+scheduled_tick = { pos = [9, 64, 10] }
+[step.expect]
+logs = [
+  "ruby block random tick at 10 64 10",
+  "ruby block scheduled tick at 9 64 10",
+]
+
+# breaking: the block leaves the world, hears about it and its neighbours too
+[[step]]
+break_block = { pos = [9, 64, 10], block = "content_demo:ruby_block" }
+[step.expect]
+blocks = { "9 64 10" = "air", "10 64 10" = "content_demo:ruby_block" }
+logs = ["ruby block broken at 9 64 10"]
+broken = ["9 64 10 content_demo:ruby_block"]

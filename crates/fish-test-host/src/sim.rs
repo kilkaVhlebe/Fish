@@ -46,6 +46,14 @@ pub struct Sim {
     /// The world the game runs (a folder below `saves/` of the game directory); `None` simulates
     /// the main menu. Game rules are kept per world.
     pub world: Option<String>,
+    /// The blocks the script placed: position to block id (air is absent).
+    pub blocks: std::collections::BTreeMap<[i32; 3], String>,
+    /// The states the simulated game gave the Fish blocks, one run per block, sorted by first state.
+    pub block_runs: Vec<fish_hooks::BlockRun>,
+    /// The content folders `Dispatch::block_content` wrote at boot.
+    pub block_dirs: Vec<PathBuf>,
+    /// The outcome of the last `use_block` (`pass`, `handled`, `cancel`, `replace:<text>`).
+    pub last_use: String,
 }
 
 impl Default for Sim {
@@ -66,6 +74,10 @@ impl Default for Sim {
             received: Vec::new(),
             broken: Vec::new(),
             players: BTreeSet::new(),
+            blocks: std::collections::BTreeMap::new(),
+            block_runs: Vec::new(),
+            block_dirs: Vec::new(),
+            last_use: String::new(),
             world: Some("world".to_string()),
             player: Some(PlayerSnapshot {
                 x: 0.5,

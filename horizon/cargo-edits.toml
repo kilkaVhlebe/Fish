@@ -22,3 +22,9 @@ path = "../../fish/crates/fish-hooks"
 crate = "crates/horizon-command"
 name = "fish-hooks"
 path = "../../fish/crates/fish-hooks"
+
+# Block events of the simulation (patch 0007): the level code asks Fish which states are blocks of mods.
+[[dependency]]
+crate = "crates/horizon-world"
+name = "fish-hooks"
+path = "../../fish/crates/fish-hooks"

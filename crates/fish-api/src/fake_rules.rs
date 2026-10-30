@@ -23,8 +23,8 @@ struct Stored {
 
 static RULES: Mutex<Vec<(String, Stored)>> = Mutex::new(Vec::new());
 static WORLD: Mutex<bool> = Mutex::new(true);
-static FROZEN: Mutex<bool> = Mutex::new(false);
-static SERIAL: Mutex<()> = Mutex::new(());
+pub(crate) static FROZEN: Mutex<bool> = Mutex::new(false);
+pub(crate) static SERIAL: Mutex<()> = Mutex::new(());
 
 fn text(s: FishStr) -> String {
     // SAFETY: the API passes valid strings.

@@ -1,0 +1,68 @@
+Fish: events of the blocks Fish mods register, from the block simulation (P8.2).
+
+Horizon runs a block's neighbour updates, scheduled ticks and random ticks in `Sim`, a generic
+type (`impl<L: LevelAccess + ?Sized> Sim<'_, L>`) that horizon-mixins cannot hook. This patch adds
+one call at the start of `neighbor_changed`, `tick_block` and `random_tick_block`; it asks
+`fish_hooks` whether the state is one of a block a mod registered (a comparison with the
+loader's state ranges) and then raises the block event with no game view: the role and the
+dimension are what the game thread last noted (`fish_hooks::note_thread_context`). Horizon's
+`neighbor_changed` names the block that changed, not its position, so the event's neighbour
+position is the block's own. The patch adds `fish-hooks` to horizon-world (`horizon/cargo-edits.toml`).
+
+diff --git a/crates/horizon-world/src/level/hooks.rs b/crates/horizon-world/src/level/hooks.rs
+index f402e8e..2ba57e4 100644
+--- a/crates/horizon-world/src/level/hooks.rs
++++ b/crates/horizon-world/src/level/hooks.rs
+@@ -18,6 +18,8 @@ impl<L: LevelAccess + ?Sized> Sim<'_, L> {
+         changed: BlockId,
+         moved: bool,
+     ) {
++        // Fish: a block a mod registered hears about its neighbours.
++        fish_block_event(fish_hooks::BlockEventKind::NeighborChanged, state, pos);
+         let b = self.b;
+         let block = b.block(state);
+         let chain = &b.data(state).chain;
+@@ -663,3 +665,21 @@ impl super::Behaviours {
+         self.props.sculk_sensor_phase
+     }
+ }
++
++/// Fish: tells the block a mod registered (when `state` is one) that `kind` happened to it.
++/// Horizon names the block that changed for a neighbour change, not where, so `other_pos` is `pos`.
++pub(super) fn fish_block_event(
++    kind: fish_hooks::BlockEventKind,
++    state: BlockStateId,
++    pos: BlockPos,
++) {
++    let Some(d) = fish_hooks::get().filter(|d| d.is_block_state(state.0)) else {
++        return;
++    };
++    let (role, dimension) = fish_hooks::thread_context();
++    let mut event = fish_hooks::BlockEvent::new(kind, state.0, [pos.x, pos.y, pos.z]);
++    event.other_pos = event.pos;
++    event.role = role;
++    event.dimension = dimension;
++    d.block_event(None, &event);
++}
+diff --git a/crates/horizon-world/src/level/tick.rs b/crates/horizon-world/src/level/tick.rs
+index 0a71727..06d578f 100644
+--- a/crates/horizon-world/src/level/tick.rs
++++ b/crates/horizon-world/src/level/tick.rs
+@@ -21,6 +21,8 @@ impl<L: LevelAccess + ?Sized> Sim<'_, L> {
+ 
+     /// `BlockState.tick` (scheduled block tick).
+     pub fn tick_block(&mut self, state: BlockStateId, pos: BlockPos) {
++        // Fish: a block a mod registered hears about its scheduled tick.
++        super::hooks::fish_block_event(fish_hooks::BlockEventKind::ScheduledTick, state, pos);
+         let b = self.b;
+         let p = b.props;
+         let block = b.block(state);
+@@ -228,6 +230,8 @@ impl<L: LevelAccess + ?Sized> Sim<'_, L> {
+     }
+ 
+     pub fn random_tick_block(&mut self, state: BlockStateId, pos: BlockPos) {
++        // Fish: a block a mod registered hears about its random tick.
++        super::hooks::fish_block_event(fish_hooks::BlockEventKind::RandomTick, state, pos);
+         let b = self.b;
+         let p = b.props;
+         let block = b.block(state);

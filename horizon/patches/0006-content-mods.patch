@@ -1,0 +1,32 @@
+Fish: Fish blocks as content mods (P8.2).
+
+`content_root` builds the resource root with the content mods that are on (docs/modpacks.md). Blocks
+that Fish mods register are content too: the loader writes one content folder per mod (manifest,
+block declarations, the mod's assets) and this patch adds them to the mods `content_root` reads, as
+mods that are always on, so the overlay Horizon builds holds the Fish blocks, their states, models,
+textures and translations. The folders come from `fish_bridge::blocks::content_folders`
+(`Dispatch::block_content`), which needs the bundle applied.
+
+diff --git a/crates/horizon-client/src/game/mods.rs b/crates/horizon-client/src/game/mods.rs
+index 0922073..2c9d28c 100644
+--- a/crates/horizon-client/src/game/mods.rs
++++ b/crates/horizon-client/src/game/mods.rs
+@@ -205,13 +205,17 @@ pub(super) fn content_root(
+     let mut paths = horizon_mods::find(&here.join(mod_list::DIR));
+     paths.retain(|p| !dev.contains(p));
+     paths.extend(dev.iter().cloned());
++    // Fish: the content folders of the blocks mods registered are mods that are always on.
++    let fish = super::fish_bridge::blocks::content_folders();
++    paths.retain(|p| !fish.contains(p));
++    paths.extend(fish.iter().cloned());
+     let mut mods: Vec<ContentMod> = Vec::new();
+     for path in &paths {
+         let Ok(package) = Package::read(path) else {
+             continue;
+         };
+         let m = &package.manifest;
+-        let on = enabled.contains(&m.id) || dev.contains(path);
++        let on = enabled.contains(&m.id) || dev.contains(path) || fish.contains(path);
+         if !on
+             || !m.capabilities.contains(&Capability::Registries)
+             || mods.iter().any(|c| c.id == m.id)

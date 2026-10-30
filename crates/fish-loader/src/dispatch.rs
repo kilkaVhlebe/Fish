@@ -1,6 +1,7 @@
 //! The [`Dispatch`] implementation: Horizon's hooks become Fish events.
 
 use std::ffi::c_void;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -10,8 +11,8 @@ use fish_abi::debug::DebugPayload;
 use fish_abi::game::{EVENTS, GamePayload};
 use fish_abi::{ActionResult, COMBINE_FIRST_NON_PASS, COMBINE_NOTIFY, FishHandle, FishStr};
 use fish_hooks::{
-    ClientView, CommandOutcome, CommandSource, Dispatch, GameEvent, GameRuleDef, HudView, Kind,
-    NativeModRow, Outcome, Role, RuleValue,
+    BlockDef, BlockEvent, BlockRun, ClientView, CommandOutcome, CommandSource, Dispatch, GameEvent,
+    GameRuleDef, HudView, Kind, NativeModRow, Outcome, Role, RuleValue,
 };
 
 use crate::boot::Loader;
@@ -711,6 +712,26 @@ impl Dispatch for LoaderDispatch {
 
     fn game_rules_save(&self, world: &str) {
         quiet((), || self.loader.inner.rules_save(world));
+    }
+
+    fn blocks(&self, out: &mut Vec<BlockDef>) {
+        quiet((), || self.loader.inner.blocks_list(out));
+    }
+
+    fn block_content(&self) -> Vec<PathBuf> {
+        quiet(Vec::new(), || self.loader.inner.blocks_content())
+    }
+
+    fn blocks_built(&self, runs: &[BlockRun]) {
+        quiet((), || self.loader.inner.blocks_built(runs));
+    }
+
+    fn is_block_state(&self, state: u32) -> bool {
+        quiet(false, || self.loader.inner.block_is_state(state))
+    }
+
+    fn block_event(&self, game: Option<&mut dyn ClientView>, event: &BlockEvent<'_>) -> Outcome {
+        quiet(Outcome::Pass, || self.loader.inner.block_event(game, event))
     }
 
     fn list_mods(&self, rows: &mut Vec<NativeModRow>) {

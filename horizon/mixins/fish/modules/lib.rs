@@ -56,6 +56,7 @@ pub fn fire(event: &GameEvent<'_>) -> Outcome {
 pub fn note_context(role: Role, dimension: &'static str) {
     ROLE.with(|r| r.set(role));
     DIMENSION.with(|d| d.set(dimension));
+    fish_hooks::note_thread_context(role, dimension);
 }
 
 /// A server on this thread begins to stop.

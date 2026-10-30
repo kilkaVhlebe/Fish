@@ -8,6 +8,7 @@ use crate::game::Game;
 use crate::game::native_hooks::NativeMod;
 
 pub(in crate::game) fn tick_start(game: &mut Game<'_>) {
+    super::blocks::built(game);
     super::net::client_tick(game);
     super::events::note_context(game);
     super::events::note_actor(game);
@@ -25,6 +26,7 @@ thread_local! {
 
 pub(in crate::game) fn tick_end(game: &mut Game<'_>) {
     if let Some(d) = fish_hooks::get() {
+        super::blocks::flush(game);
         d.tick_end(&mut GameView { game });
         // The crash report lists the mods and the ones that failed since: refreshed now and then.
         if TICKS.with(|t| {

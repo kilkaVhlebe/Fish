@@ -24,5 +24,6 @@
   - [Registries](modders/registry.md)
   - [Tags](modders/tags.md)
   - [Game rules](modders/game_rule.md)
+  - [Blocks](modders/block.md)
 - [Tooling](modders/tooling.md)
 - [Testing](modders/testing.md)

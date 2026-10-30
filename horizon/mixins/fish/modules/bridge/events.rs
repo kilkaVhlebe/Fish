@@ -48,12 +48,12 @@ fn fire(game: &mut Game<'_>, d: &dyn Dispatch, e: &GameEvent<'_>) -> Outcome {
     d.game_event(Some(&mut GameView { game }), e)
 }
 
-struct Actor {
-    name: String,
-    uuid: [u8; 16],
+pub(super) struct Actor {
+    pub(super) name: String,
+    pub(super) uuid: [u8; 16],
 }
 
-fn actor(game: &Game<'_>) -> Actor {
+pub(super) fn actor(game: &Game<'_>) -> Actor {
     Actor {
         name: game.acting_player_name().to_owned(),
         uuid: game.lan_acting_uuid.map_or([0; 16], u128::to_be_bytes),
@@ -64,7 +64,7 @@ fn block_pos_of(p: [f64; 3]) -> [i32; 3] {
     p.map(|v| v.floor() as i32)
 }
 
-fn face_index(face: [i32; 3]) -> u8 {
+pub(super) fn face_index(face: [i32; 3]) -> u8 {
     match face {
         [0, -1, 0] => 0,
         [0, 1, 0] => 1,
@@ -218,7 +218,7 @@ fn entity_target(game: &Game<'_>) -> Option<Target> {
     })
 }
 
-fn held_item(game: &mut Game<'_>, hand: Hand) -> String {
+pub(super) fn held_item(game: &mut Game<'_>, hand: Hand) -> String {
     let prior = std::mem::replace(&mut game.hand, hand);
     let item = game.held().map(|s| s.item.to_string()).unwrap_or_default();
     game.hand = prior;

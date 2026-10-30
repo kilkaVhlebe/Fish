@@ -58,3 +58,9 @@ moves, fix a failing patch by hand; each adds a call into `fish_bridge::net`.
 `0005-gamerule-screen.patch` is not a hook site: the Game Rules screen keeps its rows and edit state in private fields
 of one struct, so showing the rules of mods needs new fields (`RulesScreen::with_fish`). It calls
 `fish_bridge::rules::world_of` from `game/lan_screen.rs`.
+
+`0006-content-mods.patch` is not a hook site either: Horizon builds its content overlay from the mods in its mods folder,
+so `game/mods.rs::content_root` also takes the folders the loader wrote under `<game dir>/.fish/content/` and treats
+them as always-on content mods. `0007-block-ticks.patch` makes the block simulation of horizon-world (`Sim`) report
+neighbour updates, random ticks and scheduled ticks of blocks of Fish to `Dispatch::block_event`; the simulation keeps
+that state privately, so no hook can reach it.

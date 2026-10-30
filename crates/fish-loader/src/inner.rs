@@ -130,6 +130,8 @@ pub(crate) struct Inner {
     pub net: crate::net::Net,
     /// Game rules mods registered and the values of every world.
     pub rules: Mutex<crate::gamerules::RuleStore>,
+    /// Blocks mods registered, their state runs and the archives their content is copied from.
+    pub blocks: Mutex<crate::blocks::BlockStore>,
     /// Chat notices not shown yet (`Fish mod X stopped: reason`).
     pub notices: Mutex<Vec<String>>,
 }
@@ -192,6 +194,7 @@ impl Inner {
                 commands: Mutex::default(),
                 net: crate::net::Net::default(),
                 rules: Mutex::default(),
+                blocks: Mutex::default(),
                 notices: Mutex::default(),
             }
         })
@@ -287,5 +290,9 @@ impl Drop for Inner {
             .unwrap_or_else(|e| e.into_inner())
             .clear();
         self.net.clear();
+        self.blocks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 }

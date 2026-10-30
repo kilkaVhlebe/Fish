@@ -1,0 +1,12 @@
+schema = 1
+id = "block_edges"
+version = "0.1.0"
+name = "Block Edges"
+description = "Fish example mod: blocks that decide, refuse and panic (used by the test host's tests)"
+license = "MIT"
+
+[library]
+name = "block_edges"
+
+[entrypoints]
+main = ["init"]

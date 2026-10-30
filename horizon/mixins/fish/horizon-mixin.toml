@@ -440,3 +440,10 @@ target = "horizon_command::vanilla::build_with"
 kind = "RETURN"
 helper = "helpers/gamerule_tree.rs"
 bindings = [ { name = "d", ty = "Dispatcher", value = "$value" } ]
+
+[[injection]]
+id = "block-place"
+target = "horizon_client::game::block_items::Game<'_>::apply_item_block_state"
+kind = "HEAD"
+helper = "helpers/block_place.rs"
+bindings = [ { name = "game", ty = "&mut Game<'_>", value = "&mut *self" }, { name = "pos", ty = "[i32; 3]", value = "pos" }, { name = "state", ty = "BlockStateId", value = "state" }, { name = "stack", ty = "&ItemStack", value = "stack" } ]

@@ -13,7 +13,7 @@ pub const PLAYER: &str = "Steve";
 /// The default dimension of the simulation.
 pub const OVERWORLD: &str = "minecraft:overworld";
 
-fn outcome_name(o: &Outcome) -> String {
+pub(crate) fn outcome_name(o: &Outcome) -> String {
     match o {
         Outcome::Pass => "pass".to_string(),
         Outcome::Handled => "handled".to_string(),
@@ -22,7 +22,7 @@ fn outcome_name(o: &Outcome) -> String {
     }
 }
 
-fn uuid_of(name: &str) -> [u8; 16] {
+pub(crate) fn uuid_of(name: &str) -> [u8; 16] {
     let mut h: u128 = 0xcbf2_9ce4_8422_2325;
     for b in name.bytes() {
         h = (h ^ u128::from(b)).wrapping_mul(0x0000_0100_0000_01b3_0000_0000_0000_013b);
@@ -31,7 +31,7 @@ fn uuid_of(name: &str) -> [u8; 16] {
 }
 
 impl TestHost {
-    fn server_role(&self) -> Role {
+    pub(crate) fn server_role(&self) -> Role {
         match self.side {
             Side::Client => Role::IntegratedServer,
             Side::Server => Role::DedicatedServer,
@@ -178,12 +178,57 @@ impl TestHost {
         self.sim.players.remove(name);
     }
 
-    /// The player uses `item` on the block `block` at `pos`. The client's prediction fires first;
-    /// the server decides if the client did not cancel. Returns the final outcome.
+    /// The player uses `item` on the block `block` at `pos`, clicking face 1 with the main hand.
+    /// See [`use_block_at`](Self::use_block_at).
     pub fn use_block(&mut self, pos: [i32; 3], block: &str, item: &str) -> Outcome {
+        self.use_block_at(pos, 1, 0, block, item)
+    }
+
+    /// The player uses `item` (hand `hand`) on `face` of the block at `pos`. When the simulated
+    /// world holds a Fish block there, that block decides first (its `Use` event): `Handled` or
+    /// `Cancel` ends the click. Otherwise the client's prediction fires, then the server decides if
+    /// the client did not cancel. `block` names the block when the world holds none. Returns the
+    /// final outcome (also kept for `expect.use_result`).
+    pub fn use_block_at(
+        &mut self,
+        pos: [i32; 3],
+        face: u8,
+        hand: u8,
+        block: &str,
+        item: &str,
+    ) -> Outcome {
+        let outcome = self.use_block_flow(pos, face, hand, block, item);
+        self.sim.last_use = outcome_name(&outcome);
+        outcome
+    }
+
+    fn use_block_flow(
+        &mut self,
+        pos: [i32; 3],
+        face: u8,
+        hand: u8,
+        block: &str,
+        item: &str,
+    ) -> Outcome {
+        let held = self.sim.blocks.get(&pos).cloned();
+        if let Some(state) = self.fish_state(pos) {
+            let mut b = fish_hooks::BlockEvent::new(fish_hooks::BlockEventKind::Use, state, pos);
+            b.face = face;
+            b.hand = hand;
+            b.actor = PLAYER;
+            b.actor_uuid = uuid_of(PLAYER);
+            b.item = item;
+            let outcome = self.block_event(b);
+            if outcome != Outcome::Pass {
+                self.sim.last_outcome = outcome_name(&outcome);
+                return outcome;
+            }
+        }
+        let block = held.as_deref().unwrap_or(block);
         let mut e = Self::at(Kind::UseBlock);
         e.pos = pos;
-        e.face = 1;
+        e.face = face;
+        e.hand = hand;
         e.subject = block;
         e.item = item;
         e.is_client = true;
@@ -221,8 +266,12 @@ impl TestHost {
 
     /// The player breaks the block at `pos`: `block_break_before`, then either `canceled` (when a
     /// listener cancelled) or the break itself, whose `block_break_after` the loader fires on the next server tick.
+    /// A block the simulated world holds there replaces `block`, leaves the world, and when it is a
+    /// Fish block raises its `Broken` event, then `NeighborChanged` for the Fish blocks around it.
     /// Returns true when the block broke.
     pub fn break_block(&mut self, pos: [i32; 3], block: &str) -> bool {
+        let held = self.sim.blocks.get(&pos).cloned();
+        let block = held.as_deref().unwrap_or(block);
         let mut e = Self::at(Kind::BlockBreakBefore);
         e.pos = pos;
         e.subject = block;
@@ -233,6 +282,11 @@ impl TestHost {
         self.sim
             .broken
             .push(format!("{} {} {} {block}", pos[0], pos[1], pos[2]));
+        let state = self.fish_state(pos);
+        self.sim.blocks.remove(&pos);
+        if let Some(state) = state {
+            self.fish_block_changed(fish_hooks::BlockEventKind::Broken, state, pos, PLAYER);
+        }
         true
     }
 
