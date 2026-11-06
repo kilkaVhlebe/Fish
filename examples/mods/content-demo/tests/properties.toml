@@ -1,0 +1,42 @@
+name = "block state properties: declaration, states, read and set in events, writes without a game"
+
+# the lamp has lit (2) × level (4) states after the template's single one, and the declaration
+# names its properties
+[[step]]
+game = true
+[step.expect]
+block_states = { "content_demo:ruby_lamp" = [35725, 8] }
+content_files = ["data/content_demo/horizon/block/ruby_lamp.json", "assets/content_demo/blockstates/ruby_lamp.json"]
+
+# a placed lamp is in its default state
+[[step]]
+place_block = { pos = [5, 64, 5], block = "content_demo:ruby_lamp" }
+[step.expect]
+logs = ["ruby lamp placed: level=0,lit=false"]
+block_properties = { "5 64 5" = "level=0,lit=false" }
+
+# using it lights it, then raises its level
+[[step]]
+use_block = { pos = [5, 64, 5], item = "" }
+[step.expect]
+use_result = "success"
+logs = ["ruby lamp lit at 5 64 5"]
+block_properties = { "5 64 5" = "level=0,lit=true" }
+
+[[step]]
+use_block = { pos = [5, 64, 5], item = "" }
+[step.expect]
+logs = ["ruby lamp level 1 at 5 64 5"]
+block_properties = { "5 64 5" = "level=1,lit=true" }
+
+# a neighbour change has no game: the lamp goes out on the server's next tick
+[[step]]
+place_block = { pos = [6, 64, 5], block = "content_demo:raw_ruby" }
+[step.expect]
+logs = ["ruby lamp goes out at 5 64 5"]
+block_properties = { "5 64 5" = "level=1,lit=true" }
+
+[[step]]
+server_ticks = 1
+[step.expect]
+block_properties = { "5 64 5" = "level=1,lit=false" }

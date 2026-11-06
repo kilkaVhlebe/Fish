@@ -94,3 +94,8 @@ Content expectations: `fuels` (`"item" = ticks`, 0 for no fuel), `compostables` 
 stand-ins (coal and sticks burn, apples compost, an axe strips oak logs, planks burn) and applies the mods' entries with
 the same functions as the edition. See [content tables](content.md), [sound events](sound.md) and
 [particle types](particle.md).
+
+Block state properties: `block_properties = { "x y z" = "level=1,lit=true" }` checks the state of the Fish block at a
+position (`k=v` pairs sorted by key). A placed block starts in its default state; the simulated server puts the states
+mods set, and raises `neighbor_changed`, `random_tick` and `scheduled_tick` without a game like the edition, so their
+writes land on the next `server_ticks`. See [blocks](block.md#state-properties).

@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use fish_abi::DropUserFn;
 use fish_abi::blocks::BlockHandlerFn;
-use fish_hooks::{BlockDef, BlockRun, ItemDef};
+use fish_hooks::{BlockDef, BlockRun, ItemDef, StatePropertyDef, properties_text};
 use fish_pack::FishArchive;
 use serde::Serialize;
 
@@ -81,6 +81,20 @@ pub(crate) struct Built {
     pub repeated: Vec<String>,
 }
 
+/// Why [`BlockStore::add_property`] refused a property.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PropertyError {
+    /// No block of that id.
+    NoBlock,
+    /// The block is another mod's.
+    NotOwner,
+    /// The block is in use (the runs are known).
+    Busy,
+    /// The block already has a property of that name.
+    Duplicate,
+    /// More properties or combinations than a block may have.
+    TooMany,
+}
 /// Every block a loader knows.
 #[derive(Default)]
 pub(crate) struct BlockStore {
@@ -89,6 +103,8 @@ pub(crate) struct BlockStore {
     runs: Vec<Run>,
     /// The archives of the mods that registered blocks, for the content copy.
     archives: HashMap<u64, FishArchive>,
+    /// The properties of the Fish blocks' states (`k=v,...`), as the game reported them.
+    state_properties: HashMap<u32, String>,
 }
 
 impl BlockStore {
@@ -99,6 +115,68 @@ impl BlockStore {
         }
         self.blocks.push(Arc::new(entry));
         Ok(())
+    }
+
+    /// Adds a state property to block `id` of mod `token` (before the runs are known).
+    pub(crate) fn add_property(
+        &mut self,
+        token: u64,
+        id: &str,
+        property: StatePropertyDef,
+    ) -> Result<(), PropertyError> {
+        let Some(entry) = self.blocks.iter_mut().find(|b| b.def.id == id) else {
+            return Err(PropertyError::NoBlock);
+        };
+        if entry.owner != token {
+            return Err(PropertyError::NotOwner);
+        }
+        let Some(entry) = Arc::get_mut(entry) else {
+            return Err(PropertyError::Busy);
+        };
+        let props = &mut entry.def.properties;
+        if props.iter().any(|p| p.name == property.name) {
+            return Err(PropertyError::Duplicate);
+        }
+        if props.len() >= fish_abi::blocks::MAX_PROPERTIES {
+            return Err(PropertyError::TooMany);
+        }
+        let combos = fish_hooks::property_combinations(props) * property.values.len();
+        if combos > fish_abi::blocks::MAX_COMBINATIONS {
+            return Err(PropertyError::TooMany);
+        }
+        props.push(property);
+        Ok(())
+    }
+
+    /// Keeps the properties of the states that belong to Fish blocks.
+    pub(crate) fn set_properties(&mut self, states: &[(u32, String)]) {
+        let kept: Vec<(u32, String)> = states
+            .iter()
+            .filter(|(s, _)| self.find(*s).is_some())
+            .cloned()
+            .collect();
+        self.state_properties = kept.into_iter().collect();
+    }
+
+    /// The properties of Fish block state `state` (`k=v,...`), when the game reported them.
+    pub(crate) fn properties_of(&self, state: u32) -> Option<&str> {
+        self.state_properties.get(&state).map(String::as_str)
+    }
+
+    /// The state of the same block as `state` with property `name` set to `value`.
+    pub(crate) fn with_property(&self, state: u32, name: &str, value: &str) -> Option<u32> {
+        let (entry, first) = self.find(state)?;
+        let count = self.range(&entry.def.id)?.1;
+        let current = self.properties_of(state)?;
+        let mut pairs: Vec<(&str, &str)> = current
+            .split(',')
+            .filter(|p| !p.is_empty())
+            .filter_map(|p| p.split_once('='))
+            .collect();
+        let slot = pairs.iter_mut().find(|(k, _)| *k == name)?;
+        slot.1 = value;
+        let wanted = properties_text(pairs);
+        (first..first + count).find(|s| self.properties_of(*s) == Some(wanted.as_str()))
     }
 
     /// The blocks in registration order.
@@ -184,6 +262,7 @@ impl BlockStore {
     /// Drops every block (and so every user pointer), run and archive.
     pub(crate) fn clear(&mut self) {
         self.runs.clear();
+        self.state_properties.clear();
         self.blocks.clear();
         self.archives.clear();
     }
@@ -286,10 +365,19 @@ struct Properties<'a> {
 }
 
 #[derive(Serialize)]
+struct StatePropertyJson<'a> {
+    name: &'a str,
+    values: &'a [String],
+    default: &'a str,
+}
+
+#[derive(Serialize)]
 struct BlockJson<'a> {
     template: &'a str,
     properties: Properties<'a>,
     item: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    state_properties: Vec<StatePropertyJson<'a>>,
 }
 
 /// The bytes of Horizon's `horizon/block/<path>.json` for `def`.
@@ -306,6 +394,15 @@ pub(crate) fn block_json(def: &BlockDef) -> Vec<u8> {
             sounds: def.sounds.as_deref(),
         },
         item: true,
+        state_properties: def
+            .properties
+            .iter()
+            .map(|p| StatePropertyJson {
+                name: &p.name,
+                values: &p.values,
+                default: p.default_value(),
+            })
+            .collect(),
     };
     let mut bytes = serde_json::to_vec_pretty(&json).expect("a block serializes");
     bytes.push(b'\n');
@@ -544,6 +641,7 @@ mod tests {
             map_color: None,
             sounds: None,
             events: 0,
+            properties: Vec::new(),
         }
     }
 

@@ -125,6 +125,85 @@ unsafe extern "C" fn state_range(
     }
 }
 
+/// One `add_property` the fake saw: (block, name, values, default index).
+type SeenProperty = (String, String, Vec<String>, u32);
+
+/// Every `add_property` the fake saw.
+static PROPERTIES: Mutex<Vec<SeenProperty>> = Mutex::new(Vec::new());
+/// Every `set_state` the fake saw: (view index, position, state).
+static WRITES: Mutex<Vec<(u32, [i32; 3], u32)>> = Mutex::new(Vec::new());
+
+unsafe extern "C" fn add_property(
+    _h: *mut c_void,
+    _token: u64,
+    block: FishStr,
+    name: FishStr,
+    values: *const FishStr,
+    count: u32,
+    default: u32,
+) -> FishStatus {
+    let (block, name) = (text(block), text(name));
+    if !BLOCKS.lock().unwrap().iter().any(|b| b.id == block) {
+        return FishStatus::INVALID_ARGUMENT;
+    }
+    // SAFETY: the API passes `count` valid strings.
+    let values: Vec<String> = unsafe { std::slice::from_raw_parts(values, count as usize) }
+        .iter()
+        .map(|v| text(*v))
+        .collect();
+    let mut seen = PROPERTIES.lock().unwrap();
+    if seen.iter().any(|(b, n, _, _)| *b == block && *n == name) {
+        return FishStatus::ALREADY_EXISTS;
+    }
+    seen.push((block, name, values, default));
+    FishStatus::OK
+}
+
+/// The fake's states: `t:lamp` has `lit` (false, true) × `level` (0..=2) from 100, the last
+/// property fastest.
+unsafe extern "C" fn with_property(
+    _h: *mut c_void,
+    state: u32,
+    name: FishStr,
+    value: FishStr,
+    out: *mut u32,
+) -> FishStatus {
+    let (name, value) = (text(name), text(value));
+    let Some(index) = state.checked_sub(100).filter(|i| *i < 6) else {
+        return FishStatus::NOT_FOUND;
+    };
+    let (mut lit, mut level) = (index / 3, index % 3);
+    match (name.as_str(), value.as_str()) {
+        ("lit", "false") => lit = 0,
+        ("lit", "true") => lit = 1,
+        ("level", v) => match v.parse::<u32>() {
+            Ok(n) if n < 3 => level = n,
+            _ => return FishStatus::NOT_FOUND,
+        },
+        _ => return FishStatus::NOT_FOUND,
+    }
+    // SAFETY: the API passes a valid out pointer.
+    unsafe { *out = 100 + lit * 3 + level };
+    FishStatus::OK
+}
+
+unsafe extern "C" fn set_state(
+    _h: *mut c_void,
+    view: FishHandle,
+    x: i32,
+    y: i32,
+    z: i32,
+    state: u32,
+) -> FishStatus {
+    if !(100..106).contains(&state) {
+        return FishStatus::NOT_FOUND;
+    }
+    if view.index == 0 {
+        return FishStatus::UNSUPPORTED;
+    }
+    WRITES.lock().unwrap().push((view.index, [x, y, z], state));
+    FishStatus::OK
+}
 static BLOCK: BlockServiceV1 = BlockServiceV1 {
     header: FishServiceHeader {
         size: size_of::<BlockServiceV1>(),
@@ -132,6 +211,9 @@ static BLOCK: BlockServiceV1 = BlockServiceV1 {
     },
     register,
     state_range,
+    add_property,
+    with_property,
+    set_state,
 };
 
 /// The table for a service id of this fake.
@@ -156,6 +238,8 @@ fn fresh() -> std::sync::MutexGuard<'static, ()> {
         }
     }
     STATES.lock().unwrap().clear();
+    PROPERTIES.lock().unwrap().clear();
+    WRITES.lock().unwrap().clear();
     *crate::fake_rules::FROZEN.lock().unwrap() = false;
     guard
 }
@@ -186,6 +270,7 @@ fn payload(event: u8) -> BlockPayloadV1 {
             index: 7,
             generation: 9,
         },
+        properties: FishStr::from_static("facing=north,lit=true"),
     }
 }
 
@@ -611,4 +696,104 @@ fn the_context_decodes_faces_hands_roles_and_absent_values() {
         len: 1,
     };
     assert_eq!(ctx(&p).block(), "");
+}
+
+#[test]
+fn state_properties_are_added_after_the_block() {
+    let _g = fresh();
+    use crate::block::StateProperty;
+    Blocks::register(
+        "t:lamp",
+        BlockSettings::copy("minecraft:iron_block")
+            .property(StateProperty::boolean("lit", false))
+            .property(StateProperty::int("level", 0..=2, 1))
+            .property(StateProperty::enumeration("color", ["red", "blue"], "blue")),
+    )
+    .unwrap();
+    let seen = PROPERTIES.lock().unwrap().clone();
+    let words = |v: &[&str]| v.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+    assert_eq!(
+        seen,
+        [
+            (
+                "t:lamp".to_string(),
+                "lit".to_string(),
+                words(&["false", "true"]),
+                0
+            ),
+            (
+                "t:lamp".to_string(),
+                "level".to_string(),
+                words(&["0", "1", "2"]),
+                1
+            ),
+            (
+                "t:lamp".to_string(),
+                "color".to_string(),
+                words(&["red", "blue"]),
+                1
+            ),
+        ]
+    );
+    let p = StateProperty::int("level", 0..=2, 1);
+    assert_eq!(
+        (p.name(), p.values().len(), p.default_value()),
+        ("level", 3, "1")
+    );
+    // a default outside the values is refused before the host sees it
+    let err = Blocks::register(
+        "t:bad",
+        BlockSettings::copy("minecraft:stone").property(StateProperty::enumeration(
+            "mode",
+            ["a", "b"],
+            "maybe",
+        )),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("not one of its values"), "{err}");
+    // the host's refusal of a property (a second `lit`) is the registration's error
+    let err = Blocks::register(
+        "t:twice",
+        BlockSettings::copy("minecraft:stone")
+            .property(StateProperty::boolean("lit", false))
+            .property(StateProperty::boolean("lit", true)),
+    )
+    .unwrap_err();
+    assert_eq!(err.status(), Some(FishStatus::ALREADY_EXISTS));
+}
+
+#[test]
+fn a_context_reads_and_sets_state_properties() {
+    let _g = fresh();
+    let p = payload(event::USE);
+    let c = ctx(&p);
+    assert_eq!(c.properties(), "facing=north,lit=true");
+    assert_eq!(c.property("facing"), Some("north"));
+    assert_eq!(c.property_bool("lit"), Some(true));
+    assert_eq!(c.property("power"), None);
+    assert_eq!(c.property_int("facing"), None);
+    // an older host's payload has no properties
+    let mut old = payload(event::USE);
+    old.size = std::mem::offset_of!(BlockPayloadV1, properties) as u32;
+    assert_eq!(ctx(&old).properties(), "");
+    // the fake lamp: lit × level from state 100
+    let mut lamp = payload(event::USE);
+    lamp.state = 101; // lit=false, level=1
+    let c = ctx(&lamp);
+    assert_eq!(c.state_with("lit", true).unwrap(), 104);
+    assert_eq!(c.state_with("level", 2).unwrap(), 102);
+    assert_eq!(
+        c.state_with("level", 9).unwrap_err().status(),
+        Some(FishStatus::NOT_FOUND)
+    );
+    c.set_property("lit", true).unwrap();
+    assert_eq!(*WRITES.lock().unwrap(), [(7, [1, -2, 3], 104)]);
+    lamp.view = FishHandle {
+        index: 0,
+        generation: 0,
+    };
+    assert_eq!(
+        ctx(&lamp).set_state(103).unwrap_err().status(),
+        Some(FishStatus::UNSUPPORTED)
+    );
 }

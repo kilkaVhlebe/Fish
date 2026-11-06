@@ -140,6 +140,8 @@ pub(crate) struct Inner {
     pub content: Mutex<crate::content::ContentStore>,
     /// Chat notices not shown yet (`Fish mod X stopped: reason`).
     pub notices: Mutex<Vec<String>>,
+    /// Block state writes of events raised without a game, for the server's next tick.
+    pub block_writes: Mutex<Vec<([i32; 3], u32)>>,
 }
 
 /// Construction parameters of [`Inner`].
@@ -205,6 +207,7 @@ impl Inner {
                 groups: Mutex::default(),
                 content: Mutex::default(),
                 notices: Mutex::default(),
+                block_writes: Mutex::default(),
             }
         })
     }

@@ -553,7 +553,10 @@ impl Dispatch for LoaderDispatch {
     }
 
     fn tick_end(&self, game: &mut dyn ClientView) {
-        quiet((), || self.tick(game, false));
+        quiet((), || {
+            self.tick(game, false);
+            self.loader.inner.flush_block_writes(game);
+        });
     }
 
     fn frame(&self, game: &mut dyn ClientView, elapsed_secs: f32) {
@@ -725,6 +728,17 @@ impl Dispatch for LoaderDispatch {
 
     fn blocks_built(&self, runs: &[BlockRun]) {
         quiet((), || self.loader.inner.blocks_built(runs));
+    }
+
+    fn block_properties(&self, states: &[(u32, String)]) {
+        quiet((), || {
+            self.loader
+                .inner
+                .blocks
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .set_properties(states);
+        });
     }
 
     fn is_block_state(&self, state: u32) -> bool {

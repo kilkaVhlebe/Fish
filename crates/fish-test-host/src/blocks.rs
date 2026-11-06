@@ -61,28 +61,64 @@ fn id_parts(id: &str) -> (&str, &str) {
     id.split_once(':').unwrap_or(("", id))
 }
 
+/// The added properties of a block in the order the game lays its states out: sorted by name,
+/// the last one changing fastest (vanilla's order; the simulated template has no properties).
+fn layout_order(properties: &[fish_hooks::StatePropertyDef]) -> Vec<&fish_hooks::StatePropertyDef> {
+    let mut sorted: Vec<&fish_hooks::StatePropertyDef> = properties.iter().collect();
+    sorted.sort_by(|a, b| a.name.cmp(&b.name));
+    sorted
+}
+
+/// The text of state `index` of a block with the added properties `properties`, as the game
+/// reports it: `k=v` pairs sorted by key.
+pub fn combination(properties: &[fish_hooks::StatePropertyDef], mut index: u32) -> String {
+    let mut pairs: Vec<(&str, &str)> = Vec::new();
+    for p in layout_order(properties).into_iter().rev() {
+        let n = p.values.len() as u32;
+        pairs.push((&p.name, &p.values[(index % n) as usize]));
+        index /= n;
+    }
+    fish_hooks::properties_text(pairs)
+}
+
+/// The index of the state of a block with every added property at its default.
+pub fn default_index(properties: &[fish_hooks::StatePropertyDef]) -> u32 {
+    layout_order(properties)
+        .into_iter()
+        .fold(0, |at, p| at * p.values.len() as u32 + p.default as u32)
+}
+
 impl TestHost {
     /// Assigns the states of the Fish blocks like Horizon does (blocks sorted by mod and path, one
-    /// state each, from [`FIRST_FISH_STATE`]), writes the content folders and tells the loader.
-    /// Runs at the end of boot.
+    /// state per combination of their added state properties in vanilla's order, from
+    /// [`FIRST_FISH_STATE`]), writes the content folders and tells the loader the runs and the
+    /// properties of every state. Runs at the end of boot.
     pub(crate) fn build_blocks(&mut self) {
         let dispatch = self.rules_dispatch();
         let mut defs = Vec::new();
         dispatch.blocks(&mut defs);
         defs.sort_by(|a, b| id_parts(&a.id).cmp(&id_parts(&b.id)));
-        let runs: Vec<BlockRun> = defs
-            .iter()
-            .zip(FIRST_FISH_STATE..)
-            .map(|(def, first)| BlockRun {
+        let mut runs: Vec<BlockRun> = Vec::new();
+        let mut properties: Vec<(u32, String)> = Vec::new();
+        let mut next = FIRST_FISH_STATE;
+        for def in &defs {
+            let count = fish_hooks::property_combinations(&def.properties) as u32;
+            for i in 0..count {
+                properties.push((next + i, combination(&def.properties, i)));
+            }
+            runs.push(BlockRun {
                 block: def.id.clone(),
-                first,
-                count: 1,
-            })
-            .collect();
+                first: next,
+                count,
+            });
+            next += count;
+        }
         let dirs = dispatch.block_content();
         dispatch.blocks_built(&runs);
+        dispatch.block_properties(&properties);
         self.sim.block_runs = runs;
         self.sim.block_dirs = dirs;
+        self.sim.state_properties = properties.into_iter().collect();
     }
 
     /// Every block a mod registered.
@@ -109,22 +145,47 @@ impl TestHost {
     }
 
     /// The state of the Fish block at `pos`; `None` for air, vanilla blocks and blocks the loader
-    /// does not know.
+    /// does not know. A block placed by the script is in its default state until a mod sets
+    /// another.
     pub fn fish_state(&self, pos: [i32; 3]) -> Option<u32> {
         let id = self.sim.blocks.get(&pos)?;
         let run = self.sim.block_runs.iter().find(|r| &r.block == id)?;
-        self.rules_dispatch()
-            .is_block_state(run.first)
-            .then_some(run.first)
+        let state = match self.sim.block_states.get(&pos) {
+            Some(s) if (run.first..run.first + run.count).contains(s) => *s,
+            _ => {
+                let def = self.block_defs().into_iter().find(|d| &d.id == id)?;
+                run.first + default_index(&def.properties)
+            }
+        };
+        self.rules_dispatch().is_block_state(state).then_some(state)
+    }
+
+    /// The properties of the Fish block state at `pos` (`k=v,...`), as the simulated game reports
+    /// them.
+    pub fn block_properties_at(&self, pos: [i32; 3]) -> Option<&str> {
+        let state = self.fish_state(pos)?;
+        self.sim.state_properties.get(&state).map(String::as_str)
     }
 
     /// Raises one block event in the server's game (the integrated one on a client host) and
-    /// records it in `sim.events` as `block/<name> <outcome>`.
+    /// records it in `sim.events` as `block/<name> <outcome>`. Like the game (patch 0007), the
+    /// events of the block simulation (neighbour changes, random and scheduled ticks) come without
+    /// a game view.
     pub fn block_event(&mut self, mut event: BlockEvent<'_>) -> Outcome {
         event.role = self.server_role();
         let role = event.role;
         let (mut view, dispatch) = self.view(role);
-        let outcome = dispatch.block_event(Some(&mut view), &event);
+        let simulated = matches!(
+            event.kind,
+            BlockEventKind::NeighborChanged
+                | BlockEventKind::RandomTick
+                | BlockEventKind::ScheduledTick
+        );
+        let outcome = if simulated {
+            dispatch.block_event(None, &event)
+        } else {
+            dispatch.block_event(Some(&mut view), &event)
+        };
         self.sim.events.push(format!(
             "block/{} {}",
             event.kind.name(),
@@ -166,6 +227,7 @@ impl TestHost {
     /// gets its `Place` event, and the Fish blocks around it `NeighborChanged`.
     pub fn place_block(&mut self, pos: [i32; 3], block: &str, item: &str, actor: &str) {
         self.sim.blocks.insert(pos, block.to_string());
+        self.sim.block_states.remove(&pos);
         let Some(state) = self.fish_state(pos) else {
             return;
         };
@@ -232,6 +294,23 @@ impl TestHost {
                         || format!("{id} has no states"),
                         |a| format!("{id} states {a:?}"),
                     ),
+                ));
+            }
+        }
+        for (key, want) in &expect.block_properties {
+            let Some(pos) = parse_pos(key) else {
+                return Some(fail(
+                    "expect.block_properties",
+                    "a position `x y z`".to_string(),
+                    format!("{key:?}"),
+                ));
+            };
+            let actual = self.block_properties_at(pos);
+            if actual != Some(want.as_str()) {
+                return Some(fail(
+                    "expect.block_properties",
+                    format!("{want} at {}", pos_text(pos)),
+                    format!("{actual:?} at {}", pos_text(pos)),
                 ));
             }
         }

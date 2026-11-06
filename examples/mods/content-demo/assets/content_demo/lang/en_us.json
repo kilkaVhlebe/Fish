@@ -1,6 +1,7 @@
 {
   "block.content_demo.ruby_block": "Block of Ruby",
   "block.content_demo.raw_ruby": "Raw Ruby",
+  "block.content_demo.ruby_lamp": "Ruby Lamp",
   "block.content_demo.ruby_log": "Ruby Log",
   "block.content_demo.stripped_ruby_log": "Stripped Ruby Log",
   "block.content_demo.waxed_ruby_block": "Waxed Block of Ruby",

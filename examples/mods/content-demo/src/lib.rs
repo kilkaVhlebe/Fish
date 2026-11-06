@@ -7,6 +7,8 @@
 //! * `content_demo:ruby_log` and `content_demo:stripped_ruby_log` copy the oak logs: an axe strips
 //!   the first into the second, and both burn easily,
 //! * honeycomb waxes the ruby block into `content_demo:waxed_ruby_block` (an axe scrapes it back),
+//! * `content_demo:ruby_lamp` copies iron and adds the state properties `lit` and `level`: using
+//!   it lights it, then raises its level; a neighbour change puts it out,
 //! * `content_demo:ruby` (a diamond that stacks to 16) logs its uses, once its place in the
 //!   inventory, and adds a tooltip line; it burns in a furnace for 2400 ticks, and using it in the
 //!   air plays the mod's sound event `content_demo:ruby_chime`,
@@ -27,7 +29,7 @@
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use fish_api::block::{BlockBehaviour, BlockSettings, Blocks};
+use fish_api::block::{BlockBehaviour, BlockSettings, Blocks, StateProperty};
 use fish_api::content::{Content, PathNodeType};
 use fish_api::event::lifecycle;
 use fish_api::item::{ItemBehaviour, ItemSettings, Items, Rarity};
@@ -44,6 +46,45 @@ static CHIME: OnceLock<SoundEvent> = OnceLock::new();
 static CHIME_PENDING: AtomicBool = AtomicBool::new(false);
 /// The particle type, for its raw id.
 static SPARKLE: OnceLock<ParticleType> = OnceLock::new();
+
+/// The ruby lamp: state properties `lit` (off by default) and `level` (0 to 3). Using it lights it,
+/// then raises its level; a neighbour change puts it out (an event without a game: the write
+/// waits for the server's next tick).
+fn lamp() -> Result<(), Error> {
+    let behaviour = BlockBehaviour::new()
+        .on_use(|c| {
+            let result = if c.property_bool("lit") == Some(true) {
+                let level = (c.property_int("level").unwrap_or(0) + 1) % 4;
+                c.set_property("level", level)
+                    .map(|()| log::info!("ruby lamp level {level} at {}", c.pos()))
+            } else {
+                c.set_property("lit", true)
+                    .map(|()| log::info!("ruby lamp lit at {}", c.pos()))
+            };
+            if let Err(e) = result {
+                log::warn!("ruby lamp not changed: {e}");
+            }
+            ActionResult::Success
+        })
+        .on_place(|c| log::info!("ruby lamp placed: {}", c.properties()))
+        .neighbor_changed(|c| {
+            if c.property_bool("lit") == Some(true) {
+                match c.set_property("lit", false) {
+                    Ok(()) => log::info!("ruby lamp goes out at {}", c.pos()),
+                    Err(e) => log::warn!("ruby lamp did not go out: {e}"),
+                }
+            }
+        });
+    Blocks::register_with(
+        "content_demo:ruby_lamp",
+        BlockSettings::copy("minecraft:iron_block")
+            .hardness(2.0)
+            .property(StateProperty::boolean("lit", false))
+            .property(StateProperty::int("level", 0..=3, 0)),
+        behaviour,
+    )?;
+    Ok(())
+}
 
 /// The content tables, the sound event and the particle type.
 fn content() -> Result<(), Error> {
@@ -188,9 +229,11 @@ fn init() -> Result<(), Error> {
             "content_demo:ruby_log",
             "content_demo:stripped_ruby_log",
             "content_demo:waxed_ruby_block",
+            "content_demo:ruby_lamp",
         ])
         .register()?;
     content()?;
+    lamp()?;
     ItemGroups::modify_entries("minecraft:ingredients", ["content_demo:ruby"])?;
 
     lifecycle::server::STARTED.register(|_| {

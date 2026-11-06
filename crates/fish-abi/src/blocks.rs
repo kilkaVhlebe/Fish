@@ -19,6 +19,14 @@ use crate::types::{FishHandle, FishStatus, FishStr};
 /// Service id.
 pub const SERVICE_BLOCK: &str = "fish:block";
 
+/// The most state properties a block may add ([`BlockServiceV1::add_property`]).
+pub const MAX_PROPERTIES: usize = 8;
+/// The most values one state property may have.
+pub const MAX_VALUES: usize = 64;
+/// The most combinations of the added properties' values a block may have (the game refuses
+/// more).
+pub const MAX_COMBINATIONS: usize = 4096;
+
 /// [`BlockSettingsV1::set`] bits: the settings that differ from the template.
 pub mod set {
     /// [`BlockSettingsV1::hardness`](super::BlockSettingsV1::hardness) is set.
@@ -136,6 +144,10 @@ pub struct BlockPayloadV1 {
     pub item: FishStr,
     /// The game that raised the event, valid during the call.
     pub view: FishHandle,
+    /// The state's properties, `k=v` pairs sorted by key and joined by commas (the template's and
+    /// the ones the mod added; empty when the game did not report them). Present when `size`
+    /// covers it.
+    pub properties: FishStr,
 }
 
 /// [`BlockHandlerFn`] result: the handler panicked (the loader stops the mod).
@@ -176,6 +188,43 @@ pub struct BlockServiceV1 {
         first: *mut u32,
         count: *mut u32,
     ) -> FishStatus,
+    /// Adds a state property to block `block` of mod `token` (registered before, and before the
+    /// registries froze): `name` (`[a-z0-9_]+`, not one of the template's), its `count` values in
+    /// order (`[a-z0-9_]+`, distinct, `2..=`[`MAX_VALUES`]) at `values`, and the index of the
+    /// default. A block has at most [`MAX_PROPERTIES`] properties and [`MAX_COMBINATIONS`]
+    /// combinations of their values. `INVALID_ARGUMENT` for a bad name, value or count, an unknown
+    /// block or one of another mod; `ALREADY_EXISTS` for a name the block already has.
+    pub add_property: unsafe extern "C" fn(
+        host: *mut c_void,
+        token: u64,
+        block: FishStr,
+        name: FishStr,
+        values: *const FishStr,
+        count: u32,
+        default: u32,
+    ) -> FishStatus,
+    /// The state of the same block as `state` with property `name` set to `value`, into `out`.
+    /// `NOT_FOUND` when `state` is not a Fish block's, the block has no such property or value, or
+    /// the game did not report the states' properties.
+    pub with_property: unsafe extern "C" fn(
+        host: *mut c_void,
+        state: u32,
+        name: FishStr,
+        value: FishStr,
+        out: *mut u32,
+    ) -> FishStatus,
+    /// Puts `state` (a Fish block's) at `x y z` in the game `view` (a handle of an event's
+    /// payload). An event raised without a game (`NO_GAME`: neighbour changes, ticks) queues the
+    /// write for the server's next tick. `UNSUPPORTED` in a window that does not own the world,
+    /// `NOT_FOUND` for a state that is not a Fish block's.
+    pub set_state: unsafe extern "C" fn(
+        host: *mut c_void,
+        view: FishHandle,
+        x: i32,
+        y: i32,
+        z: i32,
+        state: u32,
+    ) -> FishStatus,
 }
 
 #[cfg(test)]
@@ -191,7 +240,7 @@ mod tests {
         assert_eq!(offset_of!(BlockSettingsV1, light), 20);
         assert_eq!(offset_of!(BlockSettingsV1, template), 24);
         assert_eq!(offset_of!(BlockSettingsV1, sounds), 40);
-        assert_eq!(size_of::<BlockPayloadV1>(), 128);
+        assert_eq!(size_of::<BlockPayloadV1>(), 144);
         assert_eq!(offset_of!(BlockPayloadV1, event), 4);
         assert_eq!(offset_of!(BlockPayloadV1, state), 8);
         assert_eq!(offset_of!(BlockPayloadV1, pos), 16);
@@ -199,6 +248,7 @@ mod tests {
         assert_eq!(offset_of!(BlockPayloadV1, actor_uuid), 40);
         assert_eq!(offset_of!(BlockPayloadV1, block), 56);
         assert_eq!(offset_of!(BlockPayloadV1, view), 120);
+        assert_eq!(offset_of!(BlockPayloadV1, properties), 128);
     }
 
     #[test]

@@ -46,7 +46,7 @@ fn init() -> Result<(), fish_api::Error> {
   register an item with that id ([items](item.md)).
 - **Everything else comes from the template**: its collision shape, whether it ticks randomly, its state properties.
   `.random_ticks()` and `.no_collision()` do not exist because Horizon's content declarations cannot express them:
-  choose a template that already has the behaviour. Custom state properties are not available yet (P8.3).
+  choose a template that already has the behaviour. A block may add [state properties](#state-properties) of its own.
 
 ## Files
 
@@ -71,8 +71,68 @@ files left from earlier runs are removed.
 ## State ids
 
 Horizon appends the states of content blocks after vanilla's: mods in id order, blocks of a mod in id order, a block
-taking as many states as its template has. `Blocks::state_range` answers `NOT_FOUND` until the game built its states,
+taking as many states as its template has, times the combinations of its added state properties. `Blocks::state_range`
+answers `NOT_FOUND` until the game built its states,
 so ask in an event, not in `main`. A block of Fish without a state (Horizon did not add it) is logged as a warning.
+
+## State properties
+
+A block may add state properties to the ones of its template (Fabric's `appendProperties`): a boolean, a whole number in
+a range or one of a few words.
+
+```rust
+use fish_api::block::{BlockBehaviour, BlockSettings, Blocks, StateProperty};
+use fish_api::ActionResult;
+
+fn init() -> Result<(), fish_api::Error> {
+    let behaviour = BlockBehaviour::new()
+        .on_use(|c| {
+            if c.property_bool("lit") == Some(true) {
+                let level = (c.property_int("level").unwrap_or(0) + 1) % 4;
+                let _ = c.set_property("level", level);
+            } else {
+                let _ = c.set_property("lit", true);
+            }
+            ActionResult::Success
+        })
+        .neighbor_changed(|c| {
+            let _ = c.set_property("lit", false); // written on the server's next tick
+        });
+    Blocks::register_with(
+        "content_demo:ruby_lamp",
+        BlockSettings::copy("minecraft:iron_block")
+            .property(StateProperty::boolean("lit", false))
+            .property(StateProperty::int("level", 0..=3, 0)),
+        behaviour,
+    )?;
+    Ok(())
+}
+```
+
+- **`StateProperty::boolean(name, default)`**, **`int(name, min..=max, default)`** and
+  **`enumeration(name, values, default)`** describe a property; `BlockSettings::property` adds it. Names and values are
+  `[a-z0-9_]+`; a property has 2 to 64 values, a block at most 8 properties and 4096 combinations of their values.
+- **Reading**: `BlockContext::properties()` is the state's `k=v` list (the template's properties and the added ones,
+  sorted by key), `property(name)`, `property_bool` and `property_int` read one.
+- **Writing**: `set_property(name, value)` puts the state with one property changed where the block is,
+  `state_with(name, value)` only finds its id, `set_state(id)` puts any state of the block. Writes happen on the server
+  (the integrated or the dedicated one); a window gets `UNSUPPORTED`. The events of the block simulation
+  (`neighbor_changed`, `random_tick`, `scheduled_tick`) have no game at hand: their writes wait for the end of the
+  server's next tick.
+- **States**: the block's states are the template's, each once per combination of the added values, in vanilla's
+  order: every property sorted by name, the last name changing fastest. The default state has every added property at
+  its default; `/setblock` and placing the block item put it. Find states by property (`state_with`), not by
+  arithmetic on ids.
+- **Models**: the blockstates file names the added properties like the template's
+  (`"lit=true": {"model": "content_demo:block/ruby_lamp_on"}`); a block without its own blockstates file looks like its
+  template in every state.
+- **Saving**: saves store the property values with the block name, so a world keeps the states as long as the block
+  declares the same properties.
+
+A name the template already uses (`axis` for a log template) makes Horizon refuse the content of every mod for the run,
+like any other broken declaration: pick names the template does not have. The declaration carries the properties
+(`state_properties` in `data/<mod_id>/horizon/block/<path>.json`); patch `0010-block-state-properties.patch` makes
+Horizon's content overlay build the states.
 
 ## Which callbacks the game delivers
 
@@ -94,11 +154,12 @@ about 30 seconds and several GB of RAM, later ones reuse the cache.
 ## Testing
 
 `cargo fish test` has the steps `place_block`, `use_block`, `break_block`, `random_tick` and `scheduled_tick` and the
-expectations `blocks`, `block_states`, `use_result`, `content_files` and `no_content_files`. See
+expectations `blocks`, `block_states`, `block_properties`, `use_result`, `content_files` and `no_content_files`. See
 `examples/mods/content-demo`.
 
 ## Limits
 
 - Singleplayer and the integrated server only: there is no multiplayer registry synchronisation yet.
-- There is no world access API for callbacks yet: callbacks observe, and `on_use` decides.
-- One state per template state, no custom properties; no custom block entities, no custom shapes.
+- The only world write is the block's own state (`set_property`, `set_state`); there is no general world access yet.
+- Added state properties change the state only: models follow them through the blockstates file, but shapes, light and
+  the template's behaviour do not; no custom block entities, no custom shapes.

@@ -40,26 +40,29 @@ fn run(text: &str) -> Result<(), ScriptFailure> {
 #[test]
 fn states_follow_mod_and_block_order() {
     let h = host();
-    let ids = [
-        "block_edges:consumer",
-        "block_edges:panicky",
-        "block_edges:passer",
-        "block_edges:refuser",
-        "block_edges:ticker",
-        RAW,
-        RUBY,
-        "content_demo:ruby_log",
-        "content_demo:stripped_ruby_log",
-        "content_demo:waxed_ruby_block",
+    // (id, states): the lamp has lit (2) × level (4) states, every other block one.
+    let blocks = [
+        ("block_edges:consumer", 1),
+        ("block_edges:panicky", 1),
+        ("block_edges:passer", 1),
+        ("block_edges:refuser", 1),
+        ("block_edges:ticker", 1),
+        (RAW, 1),
+        (RUBY, 1),
+        ("content_demo:ruby_lamp", 8),
+        ("content_demo:ruby_log", 1),
+        ("content_demo:stripped_ruby_log", 1),
+        ("content_demo:waxed_ruby_block", 1),
     ];
-    for (i, id) in ids.iter().enumerate() {
-        let first = FIRST_FISH_STATE + u32::try_from(i).unwrap();
-        assert_eq!(h.block_state_range(id), Some(first..first + 1), "{id}");
+    let mut first = FIRST_FISH_STATE;
+    for (id, count) in blocks {
+        assert_eq!(h.block_state_range(id), Some(first..first + count), "{id}");
+        first += count;
     }
     assert_eq!(h.block_state_range("content_demo:nope"), None);
     let mut defs: Vec<String> = h.block_defs().into_iter().map(|d| d.id).collect();
     defs.sort();
-    let mut want: Vec<String> = ids.iter().map(|s| (*s).to_string()).collect();
+    let mut want: Vec<String> = blocks.iter().map(|(s, _)| (*s).to_string()).collect();
     want.sort();
     assert_eq!(defs, want);
     assert_eq!(h.block_content_dirs().len(), 2);

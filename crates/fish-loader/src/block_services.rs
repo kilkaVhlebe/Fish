@@ -10,11 +10,15 @@ use fish_abi::blocks::{
     BlockHandlerFn, BlockPayloadV1, BlockServiceV1, BlockSettingsV1, HANDLER_PANICKED, event, set,
 };
 use fish_abi::{ActionResult, DropUserFn, FishHandle, FishServiceHeader, FishStatus, FishStr};
-use fish_hooks::{BlockDef, BlockEvent, BlockEventKind, BlockRun, ClientView, ItemDef, Outcome};
+use fish_hooks::{
+    BlockDef, BlockEvent, BlockEventKind, BlockRun, ClientView, ItemDef, Outcome, StatePropertyDef,
+};
 use fish_metadata::Origin;
 use fish_pack::FishArchive;
 
-use crate::blocks::{BlockEntry, ContentMod, UserBox, check_def, check_id, write_content};
+use crate::blocks::{
+    BlockEntry, ContentMod, PropertyError, UserBox, check_def, check_id, write_content,
+};
 use crate::client_services::role_byte;
 use crate::content::check_assets;
 use crate::inner::Inner;
@@ -71,6 +75,7 @@ unsafe fn read_def(
         sounds,
         // A block without a handler has no events to ask for.
         events: if has_handler { events } else { 0 },
+        properties: Vec::new(),
     };
     check_def(&def)?;
     Ok(def)
@@ -205,6 +210,160 @@ unsafe extern "C" fn state_range(
     })
 }
 
+fn property_word_ok(word: &str) -> bool {
+    !word.is_empty()
+        && word.len() <= 64
+        && word
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+}
+
+unsafe extern "C" fn add_property(
+    host: *mut c_void,
+    token: u64,
+    block: FishStr,
+    name: FishStr,
+    values: *const FishStr,
+    count: u32,
+    default: u32,
+) -> FishStatus {
+    guard(|| {
+        // SAFETY: ABI contract: `host` is the loader's `Inner`.
+        let inner = unsafe { &*host.cast::<Inner>() };
+        // SAFETY: valid strings for the call.
+        let (Ok(block), Ok(name)) = (unsafe { block.as_str() }, unsafe { name.as_str() }) else {
+            return FishStatus::INVALID_ARGUMENT;
+        };
+        let Some(rec) = inner.record(token) else {
+            return FishStatus::INVALID_ARGUMENT;
+        };
+        let who = rec.manifest.name.clone();
+        let refuse = |why: &str| {
+            inner.warn(format!(
+                "{who} added the state property {name:?} to {block}, refused: {why}"
+            ));
+            FishStatus::INVALID_ARGUMENT
+        };
+        if inner.net.frozen.load(Ordering::Acquire) {
+            return refuse("registries are frozen");
+        }
+        let count = count as usize;
+        if values.is_null() || !(2..=fish_abi::blocks::MAX_VALUES).contains(&count) {
+            return refuse("a property has 2 to 64 values");
+        }
+        if !property_word_ok(name) {
+            return refuse("the name is not [a-z0-9_]+");
+        }
+        // SAFETY: `values` points at `count` strings valid for the call (ABI contract).
+        let raw = unsafe { std::slice::from_raw_parts(values, count) };
+        let mut list: Vec<String> = Vec::with_capacity(count);
+        for v in raw {
+            // SAFETY: as above.
+            let Ok(v) = (unsafe { v.as_str() }) else {
+                return refuse("a value is not UTF-8");
+            };
+            if !property_word_ok(v) || list.iter().any(|x| x == v) {
+                return refuse("values are distinct [a-z0-9_]+ words");
+            }
+            list.push(v.to_string());
+        }
+        if default as usize >= count {
+            return refuse("the default is not one of the values");
+        }
+        let added = inner
+            .blocks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .add_property(
+                token,
+                block,
+                StatePropertyDef {
+                    name: name.to_string(),
+                    values: list,
+                    default: default as usize,
+                },
+            );
+        match added {
+            Ok(()) => FishStatus::OK,
+            Err(PropertyError::Duplicate) => {
+                inner.warn(format!(
+                    "{who} added the state property {name} to {block} twice"
+                ));
+                FishStatus::ALREADY_EXISTS
+            }
+            Err(PropertyError::NoBlock) => refuse("no such block"),
+            Err(PropertyError::NotOwner) => refuse("the block is another mod's"),
+            Err(PropertyError::Busy) => refuse("the block is in use"),
+            Err(PropertyError::TooMany) => {
+                refuse("more than 8 properties or 4096 combinations of their values")
+            }
+        }
+    })
+}
+
+unsafe extern "C" fn with_property(
+    host: *mut c_void,
+    state: u32,
+    name: FishStr,
+    value: FishStr,
+    out: *mut u32,
+) -> FishStatus {
+    guard(|| {
+        // SAFETY: ABI contract.
+        let inner = unsafe { &*host.cast::<Inner>() };
+        // SAFETY: valid strings for the call.
+        let (Ok(name), Ok(value)) = (unsafe { name.as_str() }, unsafe { value.as_str() }) else {
+            return FishStatus::INVALID_ARGUMENT;
+        };
+        if out.is_null() {
+            return FishStatus::INVALID_ARGUMENT;
+        }
+        let found = inner
+            .blocks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .with_property(state, name, value);
+        let Some(found) = found else {
+            return FishStatus::NOT_FOUND;
+        };
+        // SAFETY: checked non-null; writable (ABI contract).
+        unsafe { *out = found };
+        FishStatus::OK
+    })
+}
+
+unsafe extern "C" fn set_state(
+    host: *mut c_void,
+    view: FishHandle,
+    x: i32,
+    y: i32,
+    z: i32,
+    state: u32,
+) -> FishStatus {
+    guard(|| {
+        // SAFETY: ABI contract.
+        let inner = unsafe { &*host.cast::<Inner>() };
+        if !inner.block_is_state(state) {
+            return FishStatus::NOT_FOUND;
+        }
+        let pos = [x, y, z];
+        if view == NO_GAME {
+            inner
+                .block_writes
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push((pos, state));
+            return FishStatus::OK;
+        }
+        match inner.handles.client(view, |c| {
+            c.role().is_server() && c.set_block_state(pos, state)
+        }) {
+            Ok(true) => FishStatus::OK,
+            Ok(false) => FishStatus::UNSUPPORTED,
+            Err(status) => status,
+        }
+    })
+}
 /// The no-game handle of an event raised without a game.
 pub(crate) const NO_GAME: FishHandle = FishHandle {
     index: u32::MAX,
@@ -372,6 +531,24 @@ impl Inner {
         }
     }
 
+    /// The end of a server's tick: puts the block states that handlers of events without a game
+    /// set (a window keeps them for its server).
+    pub(crate) fn flush_block_writes(&self, game: &mut dyn ClientView) {
+        if !game.role().is_server() {
+            return;
+        }
+        let writes =
+            std::mem::take(&mut *self.block_writes.lock().unwrap_or_else(|e| e.into_inner()));
+        for (pos, state) in writes {
+            if !game.set_block_state(pos, state) {
+                self.warn(format!(
+                    "a block state set at {} {} {} without a game was not written",
+                    pos[0], pos[1], pos[2]
+                ));
+            }
+        }
+    }
+
     /// True when `state` belongs to a Fish block.
     pub(crate) fn block_is_state(&self, state: u32) -> bool {
         self.blocks
@@ -387,11 +564,11 @@ impl Inner {
         game: Option<&mut dyn ClientView>,
         ev: &BlockEvent<'_>,
     ) -> Outcome {
-        let found = self
-            .blocks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .find(ev.state);
+        let (found, properties) = {
+            let store = self.blocks.lock().unwrap_or_else(|e| e.into_inner());
+            let properties = store.properties_of(ev.state).unwrap_or("").to_string();
+            (store.find(ev.state), properties)
+        };
         let Some((entry, first)) = found else {
             return Outcome::Pass;
         };
@@ -419,6 +596,7 @@ impl Inner {
                 dimension: FishStr::new(ev.dimension),
                 item: FishStr::new(ev.item),
                 view,
+                properties: FishStr::new(&properties),
             };
             // SAFETY: the handler and its user pointer were registered together; the payload and
             // its strings live through the call.
@@ -459,6 +637,9 @@ pub(crate) static BLOCK: BlockServiceV1 = BlockServiceV1 {
     },
     register,
     state_range,
+    add_property,
+    with_property,
+    set_state,
 };
 
 #[cfg(test)]
@@ -766,6 +947,7 @@ mod tests {
                 map_color: Some(20),
                 sounds: Some("minecraft:block.glass".into()),
                 events: 0,
+                properties: Vec::new(),
             }
         );
         assert_eq!(
@@ -856,6 +1038,201 @@ mod tests {
     }
 
     const ALL_EVENTS: u32 = event::ALL;
+
+    fn add(
+        host: *mut c_void,
+        token: u64,
+        block: &str,
+        name: &str,
+        values: &[&str],
+        default: u32,
+    ) -> FishStatus {
+        let list: Vec<FishStr> = values.iter().map(|v| FishStr::new(v)).collect();
+        // SAFETY: the table's own function with a valid host and strings that outlive the call.
+        unsafe {
+            (BLOCK.add_property)(
+                host,
+                token,
+                FishStr::new(block),
+                FishStr::new(name),
+                list.as_ptr(),
+                list.len() as u32,
+                default,
+            )
+        }
+    }
+
+    /// A game that owns its world, or one that refuses every write.
+    struct Server {
+        role: Role,
+        accept: bool,
+        writes: Vec<([i32; 3], u32)>,
+    }
+    impl ClientView for Server {
+        fn role(&self) -> Role {
+            self.role
+        }
+        fn player(&self) -> Option<PlayerSnapshot> {
+            None
+        }
+        fn show_chat(&mut self, _: &str) {}
+        fn game_dir(&self) -> PathBuf {
+            PathBuf::new()
+        }
+        fn set_block_state(&mut self, pos: [i32; 3], state: u32) -> bool {
+            self.writes.push((pos, state));
+            self.accept
+        }
+    }
+
+    #[test]
+    fn state_properties_are_checked_and_written_into_the_declaration() {
+        let (loader, h, _dir) = host();
+        let (t, other) = (token(&loader, "ruby"), token(&loader, "gem"));
+        assert_eq!(plain(h, t, "ruby:lamp"), FishStatus::OK);
+        assert_eq!(plain(h, t, "ruby:bare"), FishStatus::OK);
+        assert_eq!(
+            add(h, t, "ruby:lamp", "lit", &["false", "true"], 0),
+            FishStatus::OK
+        );
+        assert_eq!(
+            add(h, t, "ruby:lamp", "level", &["0", "1", "2"], 2),
+            FishStatus::OK
+        );
+        for (block, name, values, default, tok) in [
+            ("ruby:lamp", "Bad", &["a", "b"][..], 0, t),
+            ("ruby:lamp", "one", &["a"][..], 0, t),
+            ("ruby:lamp", "dup", &["a", "a"][..], 0, t),
+            ("ruby:lamp", "upper", &["a", "B"][..], 0, t),
+            ("ruby:lamp", "far", &["a", "b"][..], 2, t),
+            ("ruby:none", "x", &["a", "b"][..], 0, t),
+            ("ruby:lamp", "theirs", &["a", "b"][..], 0, other),
+        ] {
+            assert_eq!(
+                add(h, tok, block, name, values, default),
+                FishStatus::INVALID_ARGUMENT,
+                "{name}"
+            );
+        }
+        assert_eq!(
+            add(h, t, "ruby:lamp", "lit", &["false", "true"], 1),
+            FishStatus::ALREADY_EXISTS
+        );
+        assert!(warned(
+            &loader,
+            "added the state property lit to ruby:lamp twice"
+        ));
+        assert!(warned(&loader, "the block is another mod's"));
+        // too many combinations: 2 × 3 × 64 × 64 > 4096
+        let many: Vec<String> = (0..64).map(|i| format!("v{i}")).collect();
+        let many: Vec<&str> = many.iter().map(String::as_str).collect();
+        assert_eq!(add(h, t, "ruby:lamp", "a", &many, 0), FishStatus::OK);
+        assert_eq!(
+            add(h, t, "ruby:lamp", "b", &many, 0),
+            FishStatus::INVALID_ARGUMENT
+        );
+        let mut defs = Vec::new();
+        loader.inner.blocks_list(&mut defs);
+        let lamp = defs.iter().find(|d| d.id == "ruby:lamp").unwrap();
+        let names: Vec<&str> = lamp.properties.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["lit", "level", "a"]);
+        assert_eq!(lamp.properties[1].default_value(), "2");
+        let json: serde_json::Value =
+            serde_json::from_slice(&crate::blocks::block_json(lamp)).unwrap();
+        assert_eq!(
+            json["state_properties"][1],
+            serde_json::json!({ "name": "level", "values": ["0", "1", "2"], "default": "2" })
+        );
+        let bare = defs.iter().find(|d| d.id == "ruby:bare").unwrap();
+        let bare: serde_json::Value =
+            serde_json::from_slice(&crate::blocks::block_json(bare)).unwrap();
+        assert!(bare.get("state_properties").is_none());
+        loader.inner.net.frozen.store(true, Ordering::Release);
+        assert_eq!(
+            add(h, t, "ruby:lamp", "late", &["a", "b"], 0),
+            FishStatus::INVALID_ARGUMENT
+        );
+    }
+
+    #[test]
+    fn states_are_found_by_property_and_written_through_the_game() {
+        let (loader, h, _dir) = host();
+        let t = token(&loader, "ruby");
+        assert_eq!(plain(h, t, "ruby:lamp"), FishStatus::OK);
+        loader.inner.blocks_built(&[BlockRun {
+            block: "ruby:lamp".into(),
+            first: 50,
+            count: 4,
+        }]);
+        let props = |i: u32| (50 + i, format!("level={},lit={}", i % 2, i / 2 == 1));
+        let mut states: Vec<(u32, String)> = (0..4).map(props).collect();
+        states.push((7, "lit=true".into()));
+        loader.inner.blocks.lock().unwrap().set_properties(&states);
+        let with = |state: u32, name: &str, value: &str| -> (FishStatus, u32) {
+            let mut out = 0;
+            // SAFETY: the table's own function with valid arguments.
+            let status = unsafe {
+                (BLOCK.with_property)(h, state, FishStr::new(name), FishStr::new(value), &mut out)
+            };
+            (status, out)
+        };
+        assert_eq!(with(50, "lit", "true"), (FishStatus::OK, 52));
+        assert_eq!(with(52, "level", "1"), (FishStatus::OK, 53));
+        assert_eq!(with(53, "level", "1"), (FishStatus::OK, 53));
+        assert_eq!(with(50, "level", "7").0, FishStatus::NOT_FOUND);
+        assert_eq!(with(50, "power", "1").0, FishStatus::NOT_FOUND);
+        assert_eq!(with(7, "lit", "false").0, FishStatus::NOT_FOUND);
+        {
+            let store = loader.inner.blocks.lock().unwrap();
+            assert_eq!(store.properties_of(7), None);
+            assert_eq!(store.properties_of(51), Some("level=1,lit=false"));
+        }
+        let set = |view: FishHandle, state: u32| {
+            // SAFETY: the table's own function with valid arguments.
+            unsafe { (BLOCK.set_state)(h, view, 1, 2, 3, state) }
+        };
+        // a state that is no Fish block's, then a write without a game (queued)
+        assert_eq!(set(NO_GAME, 7), FishStatus::NOT_FOUND);
+        assert_eq!(set(NO_GAME, 52), FishStatus::OK);
+        // a window does not own the world
+        let mut window = View;
+        let status = loader
+            .inner
+            .handles
+            .client_scope(&mut window, |view| set(view, 53));
+        assert_eq!(status, FishStatus::UNSUPPORTED);
+        let mut server = Server {
+            role: Role::IntegratedServer,
+            accept: true,
+            writes: Vec::new(),
+        };
+        let status = loader
+            .inner
+            .handles
+            .client_scope(&mut server, |view| set(view, 53));
+        assert_eq!(status, FishStatus::OK);
+        assert_eq!(server.writes, [([1, 2, 3], 53)]);
+        // the window keeps the queued write; the server's tick end puts it
+        loader.inner.flush_block_writes(&mut window);
+        assert_eq!(loader.inner.block_writes.lock().unwrap().len(), 1);
+        loader.inner.flush_block_writes(&mut server);
+        assert_eq!(server.writes, [([1, 2, 3], 53), ([1, 2, 3], 52)]);
+        assert!(loader.inner.block_writes.lock().unwrap().is_empty());
+        // a game that refuses the write is warned about
+        loader
+            .inner
+            .block_writes
+            .lock()
+            .unwrap()
+            .push(([0, 0, 0], 50));
+        let mut refusing = Server {
+            role: Role::DedicatedServer,
+            accept: false,
+            writes: Vec::new(),
+        };
+        loader.inner.flush_block_writes(&mut refusing);
+        assert!(warned(&loader, "was not written"));
+    }
 
     #[test]
     fn states_are_found_and_events_reach_the_handler_with_its_payload() {

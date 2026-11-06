@@ -1,0 +1,554 @@
+Fish: state properties that Fish blocks add to their template's (P8.3).
+
+A content mod's block copies its template's states one to one. A Fish block may declare state
+properties of its own (`state_properties` in `data/<ns>/horizon/block/<path>.json`: a name, every
+value in order and the default). Its states are then the template's, each once per combination of
+the added values, in vanilla's order, which `StateTable` checks: every property sorted by name, the
+last one changing fastest (`state_layout` orders the (template state, combination) pairs). Every
+per-state table of the overlay gets them:
+
+- horizon-mods `content.rs`: the `StateProperty` declaration and `Block::state_properties`;
+- `mod_content.rs`: `Rename` maps a template state and a combination to its place, `states_of`
+  emits every state and writes the added properties into the `facts.json` rows (state and
+  description), the NBT tables' `states` lists get them too and `cached_shapes` follows;
+  `model-states.json` gets the added schema and the combined possible states,
+  `render-definitions.json` every id and the default; the block's default state has every added
+  property at its default.
+
+A name the template already uses, fewer than two distinct values, a default that is not a value or
+more than 4096 combinations refuse the content, as other declaration errors do. Without added
+properties nothing changes.
+
+diff --git a/crates/horizon-client/src/mod_content.rs b/crates/horizon-client/src/mod_content.rs
+index 2d8d2de..5e8fcd9 100644
+--- a/crates/horizon-client/src/mod_content.rs
++++ b/crates/horizon-client/src/mod_content.rs
+@@ -190,6 +190,14 @@ struct Rename {
+     to: String,
+     states: Range<u32>,
+     first: u32,
++    /// Fish: copies of each template state (the combinations of the added
++    /// state properties), and the copy this rename maps to.
++    copies: u32,
++    copy: u32,
++    /// Fish: where (template state, copy) `t * copies + c` lands among the
++    /// block's states, which follow vanilla's order (properties sorted by
++    /// name, the last one changing fastest); `None` is the identity.
++    order: Option<std::sync::Arc<Vec<u32>>>,
+ }
+ impl Rename {
+     fn new(from: &str, to: &str) -> Self {
+@@ -198,6 +206,16 @@ impl Rename {
+             to: to.to_owned(),
+             states: 0..0,
+             first: 0,
++            copies: 1,
++            copy: 0,
++            order: None,
++        }
++    }
++    /// The same rename, mapping state ids to copy `copy`.
++    fn to_copy(&self, copy: u32) -> Self {
++        Rename {
++            copy,
++            ..self.clone()
+         }
+     }
+     /// The id itself, `Block{id}`, and `block.<ns>.<path>` / `item.<ns>.<path>` keys.
+@@ -217,9 +235,10 @@ impl Rename {
+         None
+     }
+     fn id(&self, id: u32) -> Option<u32> {
+-        self.states
+-            .contains(&id)
+-            .then(|| self.first + (id - self.states.start))
++        self.states.contains(&id).then(|| {
++            let at = (id - self.states.start) * self.copies + self.copy;
++            self.first + self.order.as_ref().map_or(at, |o| o[at as usize])
++        })
+     }
+ }
+ 
+@@ -229,6 +248,156 @@ struct NewBlock<'a> {
+     rename: Rename,
+     /// The template's item, if it has one.
+     item: Option<String>,
++    /// Fish: the added state properties of each copy of a template state,
++    /// in declaration order (one empty list without any).
++    combos: Vec<Vec<(String, String)>>,
++    /// Fish: the copy with every added property at its default.
++    default_copy: u32,
++    /// Fish: the block's states in order, as (template state offset, copy).
++    layout: Vec<(u32, u32)>,
++}
++
++/// Fish: the order of a block's states made of `template` (each template
++/// state's properties, in the template's order) and the added `combos`:
++/// vanilla's, every property sorted by name with the last changing fastest,
++/// a value ranked by its first appearance among the template's states or by
++/// its place among the declared values.
++fn state_layout(
++    template: &[Vec<(String, String)>],
++    decl: &Block,
++    combos: &[Vec<(String, String)>],
++) -> Vec<(u32, u32)> {
++    let mut ranks: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
++    for state in template {
++        for (k, v) in state {
++            let values = ranks.entry(k).or_default();
++            if !values.contains(&v.as_str()) {
++                values.push(v);
++            }
++        }
++    }
++    for p in &decl.state_properties {
++        ranks.insert(&p.name, p.values.iter().map(String::as_str).collect());
++    }
++    let rank = |name: &str, value: &str| {
++        ranks[name].iter().position(|v| *v == value).unwrap_or(0)
++    };
++    let mut layout: Vec<(Vec<usize>, u32, u32)> = Vec::new();
++    for (t, state) in template.iter().enumerate() {
++        for (c, combo) in combos.iter().enumerate() {
++            let key = ranks
++                .keys()
++                .map(|name| {
++                    let value = state
++                        .iter()
++                        .chain(combo)
++                        .find(|(k, _)| k == name)
++                        .map_or("", |(_, v)| v.as_str());
++                    rank(name, value)
++                })
++                .collect();
++            layout.push((key, t as u32, c as u32));
++        }
++    }
++    layout.sort();
++    layout.into_iter().map(|(_, t, c)| (t, c)).collect()
++}
++
++/// Fish: a `facts.json` state row (`[name, air, fluid, description, state]`)
++/// with the added properties `combo` in its description and its state.
++fn add_fact_properties(row: &mut J, combo: &[(String, String)]) {
++    let J::Arr(cells) = row else {
++        return;
++    };
++    let text: Vec<String> = combo.iter().map(|(k, v)| format!("{k}={v}")).collect();
++    if let Some(J::Str(description)) = cells.get_mut(3) {
++        *description = match description.strip_suffix(']') {
++            Some(open) => format!("{open},{}]", text.join(",")),
++            None => format!("{description}[{}]", text.join(",")),
++        };
++    }
++    if let Some(state) = cells.get_mut(4) {
++        if let J::Str(name) = state {
++            *state = J::Obj(vec![
++                ("properties".into(), J::Obj(Vec::new())),
++                ("id".into(), J::Str(name.clone())),
++            ]);
++        }
++        if state.get("properties").is_none() {
++            state.set("properties", J::Obj(Vec::new()));
++        }
++        if let Some(J::Obj(properties)) = state.get_mut("properties") {
++            for (k, v) in combo {
++                properties.push((k.clone(), J::Str(v.clone())));
++            }
++        }
++    }
++}
++
++/// Fish: an NBT state (`{id, properties}` or a bare name) with the added
++/// properties `combo`.
++fn add_nbt_properties(state: &mut Tag, combo: &[(String, String)]) {
++    if let Tag::String(name) = state {
++        let name = name.clone();
++        *state = Tag::compound([("id", Tag::String(name))]);
++    }
++    let Tag::Compound(c) = state else {
++        return;
++    };
++    let key = JavaString::from("properties");
++    if !matches!(c.get(&key), Some(Tag::Compound(_))) {
++        c.insert(key.clone(), Tag::Compound(nbt::Compound::new()));
++    }
++    if let Some(Tag::Compound(properties)) = c.get_mut(&key) {
++        for (k, v) in combo {
++            properties.insert(k.as_str().into(), Tag::String(v.as_str().into()));
++        }
++    }
++}
++
++/// Fish: most copies of each template state the added properties may make.
++const MAX_COMBOS: usize = 4096;
++
++/// Fish: the combinations of `decl`'s added state properties (the last
++/// changing fastest) and the index of the default one. `template` holds the
++/// template's own property names, which an added one may not reuse.
++fn state_combos(
++    decl: &Block,
++    template: &[String],
++) -> std::result::Result<(Vec<Vec<(String, String)>>, u32), String> {
++    let mut out: Vec<Vec<(String, String)>> = vec![Vec::new()];
++    let mut default = 0usize;
++    let mut seen: Vec<&str> = Vec::new();
++    for p in &decl.state_properties {
++        let id = &decl.id;
++        if p.name.is_empty() || template.contains(&p.name) || seen.contains(&p.name.as_str()) {
++            return Err(format!("{id}: state property {:?} is taken or empty", p.name));
++        }
++        seen.push(&p.name);
++        let position = p.values.iter().position(|v| *v == p.default);
++        let unique = p.values.iter().enumerate().all(|(i, v)| !p.values[..i].contains(v));
++        let (Some(position), true, false) = (position, unique, p.values.len() < 2) else {
++            return Err(format!(
++                "{id}: state property {} needs two or more distinct values and its default among them",
++                p.name
++            ));
++        };
++        if out.len() * p.values.len() > MAX_COMBOS {
++            return Err(format!("{id}: more than {MAX_COMBOS} combinations of state properties"));
++        }
++        default = default * p.values.len() + position;
++        out = out
++            .into_iter()
++            .flat_map(|combo| {
++                p.values.iter().map(move |v| {
++                    let mut c = combo.clone();
++                    c.push((p.name.clone(), v.clone()));
++                    c
++                })
++            })
++            .collect();
++    }
++    Ok((out, default as u32))
+ }
+ /// An item being added (declared, or a block's).
+ struct NewItem {
+@@ -297,9 +466,50 @@ impl<'a> Plan<'a> {
+                 let states = range(&decl.template).ok_or_else(|| {
+                     format!("{}: template {} is not a block", decl.id, decl.template)
+                 })?;
++                // Fish: the properties of each template state, from the rows.
++                let template_states: Vec<Vec<(String, String)>> = match facts.at("states") {
++                    Some(J::Arr(rows)) => states
++                        .clone()
++                        .map(|i| match rows.get(i as usize) {
++                            Some(J::Arr(row)) => {
++                                match row.get(4).and_then(|s| s.get("properties")) {
++                                    Some(J::Obj(p)) => p
++                                        .iter()
++                                        .filter_map(|(k, v)| match v {
++                                            J::Str(v) => Some((k.clone(), v.clone())),
++                                            _ => None,
++                                        })
++                                        .collect(),
++                                    _ => Vec::new(),
++                                }
++                            }
++                            _ => Vec::new(),
++                        })
++                        .collect(),
++                    _ => Vec::new(),
++                };
++                let template_properties: Vec<String> = template_states
++                    .first()
++                    .map(|s| s.iter().map(|(k, _)| k.clone()).collect())
++                    .unwrap_or_default();
++                let (combos, default_copy) = state_combos(decl, &template_properties)
++                    .map_err(|e| format!("{}: {e}", m.id))?;
+                 let mut rename = Rename::new(&decl.template, &decl.id);
+                 rename.first = next;
+-                next += states.len() as u32;
++                rename.copies = combos.len() as u32;
++                next += states.len() as u32 * rename.copies;
++                let layout: Vec<(u32, u32)> = if combos.len() > 1 {
++                    state_layout(&template_states, decl, &combos)
++                } else {
++                    (0..states.len() as u32).map(|t| (t, 0)).collect()
++                };
++                if combos.len() > 1 {
++                    let mut order = vec![0u32; layout.len()];
++                    for (at, (t, c)) in layout.iter().enumerate() {
++                        order[(t * rename.copies + c) as usize] = at as u32;
++                    }
++                    rename.order = Some(std::sync::Arc::new(order));
++                }
+                 rename.states = states;
+                 if let Some(s) = &decl.properties.sounds {
+                     if !defaults.contains_key(s) {
+@@ -311,6 +521,9 @@ impl<'a> Plan<'a> {
+                     decl,
+                     rename,
+                     item: None,
++                    combos,
++                    default_copy,
++                    layout,
+                 });
+             }
+         }
+@@ -319,7 +532,7 @@ impl<'a> Plan<'a> {
+             for b in &blocks {
+                 *by_mod
+                     .entry(&b.decl.id[..b.decl.id.find(':').unwrap_or(0)])
+-                    .or_default() += b.rename.states.len() as u32;
++                    .or_default() += b.rename.states.len() as u32 * b.rename.copies;
+             }
+             let list: Vec<String> = by_mod.iter().map(|(m, n)| format!("{m} {n}")).collect();
+             return Err(format!(
+@@ -393,23 +606,34 @@ impl<'a> Plan<'a> {
+     /// Appends each new block's copies of the template's states to `list`;
+     /// `gameplay` rows get their index and the declared overrides.
+     fn states(&self, list: &mut Vec<J>, ids: bool, gameplay: bool) -> Result<()> {
++        self.states_of(list, ids, gameplay, false)
++    }
++
++    /// [`Self::states`]; `facts` rows (`facts.json`) also get the added state
++    /// properties of their copy (Fish).
++    fn states_of(&self, list: &mut Vec<J>, ids: bool, gameplay: bool, facts: bool) -> Result<()> {
+         if list.len() != self.states {
+             return Err(format!("{} states, not {}", list.len(), self.states).into());
+         }
+         for b in &self.blocks {
+             let renames = self.renames(b);
+-            for (i, id) in b.rename.states.clone().enumerate() {
++            for (index, &(t, copy)) in b.layout.iter().enumerate() {
++                let id = b.rename.states.start + t;
++                let combo = &b.combos[copy as usize];
+                 let mut row = list[id as usize].clone();
+                 for r in &renames {
+-                    row.rename(r, ids);
++                    row.rename(&r.to_copy(copy), ids);
+                 }
+                 if gameplay {
+-                    row.set("id", J::Num((b.rename.first + i as u32).into()));
++                    row.set("id", J::Num((b.rename.first + index as u32).into()));
+                     if !b.decl.item {
+                         row.set("item", J::Str("minecraft:air".into()));
+                     }
+                     self.override_gameplay(b, &mut row);
+                 }
++                if facts && !combo.is_empty() {
++                    add_fact_properties(&mut row, combo);
++                }
+                 list.push(row);
+             }
+         }
+@@ -443,6 +667,79 @@ impl<'a> Plan<'a> {
+         }
+     }
+ 
++    /// Fish: the model schema and possible states of blocks with added state
++    /// properties (`model-states.json`), in the states' order.
++    fn model_states(&self, doc: &mut J) {
++        for b in self.blocks.iter().filter(|b| b.combos.len() > 1) {
++            let Some(entry) = doc.get_mut(&b.decl.id) else {
++                continue;
++            };
++            if let Some(J::Obj(schema)) = entry.get_mut("schema") {
++                for p in &b.decl.state_properties {
++                    let ints: Option<Vec<i64>> = p.values.iter().map(|v| v.parse().ok()).collect();
++                    let consecutive = ints
++                        .as_ref()
++                        .is_some_and(|n| n.windows(2).all(|w| w[1] == w[0] + 1));
++                    let values = match ints {
++                        Some(n) if consecutive => J::Obj(vec![(
++                            "integer".into(),
++                            J::Arr(vec![J::Num(n[0].into()), J::Num(n[n.len() - 1].into())]),
++                        )]),
++                        _ => J::Obj(vec![(
++                            "named".into(),
++                            J::Arr(p.values.iter().map(|v| J::Str(v.clone())).collect()),
++                        )]),
++                    };
++                    schema.push((p.name.clone(), values));
++                }
++            }
++            if let Some(J::Arr(states)) = entry.get_mut("states") {
++                let template = std::mem::take(states);
++                for &(t, copy) in &b.layout {
++                    let Some(state) = template.get(t as usize) else {
++                        continue;
++                    };
++                    let mut s = state.clone();
++                    if let J::Obj(o) = &mut s {
++                        let combo = &b.combos[copy as usize];
++                        o.extend(combo.iter().map(|(k, v)| (k.clone(), J::Str(v.clone()))));
++                    }
++                    states.push(s);
++                }
++            }
++        }
++    }
++
++    /// Fish: the state ids and default of blocks with added state properties
++    /// (`render-definitions.json`), every copy of the template's.
++    fn render_states(&self, doc: &mut J) {
++        for b in self.blocks.iter().filter(|b| b.combos.len() > 1) {
++            let Some(template) = doc.get(&b.decl.template).cloned() else {
++                continue;
++            };
++            let Some(entry) = doc.get_mut(&b.decl.id) else {
++                continue;
++            };
++            if let Some(J::Arr(ids)) = template.get("states") {
++                let mut copies: Vec<u32> = ids
++                    .iter()
++                    .filter_map(J::as_u32)
++                    .flat_map(|t| {
++                        (0..b.rename.copies).filter_map(move |c| b.rename.to_copy(c).id(t))
++                    })
++                    .collect();
++                copies.sort_unstable();
++                let copies = copies.into_iter().map(|id| J::Num(id.into())).collect();
++                entry.set("states", J::Arr(copies));
++            }
++            if let Some(default) = template.get("default").and_then(J::as_u32)
++                && let Some(id) = b.rename.to_copy(b.default_copy).id(default)
++            {
++                entry.set("default", J::Num(id.into()));
++            }
++        }
++    }
++
+     /// Adds each new block's copy of the template's entry to a map by name.
+     fn names(&self, map: &mut J, ids: bool) {
+         for b in &self.blocks {
+@@ -493,11 +790,18 @@ impl<'a> Plan<'a> {
+         };
+         match name {
+             "facts.json" => {
+-                states(doc, "states", false, false)?;
++                match doc.at("states") {
++                    Some(J::Arr(a)) => self.states_of(a, false, false, true)?,
++                    _ => return Err("no list at /states".into()),
++                }
+                 let defaults = doc.at("defaults").ok_or("no defaults")?;
+                 for b in &self.blocks {
+                     let default = self.defaults[&b.decl.template];
+-                    let id = b.rename.id(default).ok_or("a default outside its block")?;
++                    let id = b
++                        .rename
++                        .to_copy(b.default_copy)
++                        .id(default)
++                        .ok_or("a default outside its block")?;
+                     defaults.set(&b.decl.id, J::Num(id.into()));
+                 }
+             }
+@@ -528,10 +832,17 @@ impl<'a> Plan<'a> {
+                     }
+                 }
+             }
+-            "model-states.json"
+-            | "landing-definitions.json"
+-            | "worldgen/blocks/survival-rules.json" => self.names(doc, false),
+-            "render-definitions.json" => self.names(doc, true),
++            "model-states.json" => {
++                self.names(doc, false);
++                self.model_states(doc);
++            }
++            "landing-definitions.json" | "worldgen/blocks/survival-rules.json" => {
++                self.names(doc, false)
++            }
++            "render-definitions.json" => {
++                self.names(doc, true);
++                self.render_states(doc);
++            }
+             "worldgen/blocks/survival-extra-definitions.json" => {
+                 if let Some(map) = doc.at("ignition_odds") {
+                     self.names(map, false);
+@@ -591,7 +902,11 @@ impl<'a> Plan<'a> {
+                 for key in ["rotate", "mirror", "full_block"] {
+                     states(doc, key, true, false)?;
+                 }
+-                let added: usize = self.blocks.iter().map(|b| b.rename.states.len()).sum();
++                let added: usize = self
++                    .blocks
++                    .iter()
++                    .map(|b| b.rename.states.len() * b.combos.len())
++                    .sum();
+                 doc.set("states", J::Num(((self.states + added) as u64).into()));
+             }
+             _ => return Err("no rule for this table".into()),
+@@ -609,19 +924,28 @@ impl<'a> Plan<'a> {
+             match (key.to_string_lossy().as_str(), value) {
+                 ("states", Tag::List(list)) if list.len() == self.states => {
+                     for b in &self.blocks {
+-                        for id in b.rename.states.clone() {
++                        for &(t, copy) in &b.layout {
++                            let id = b.rename.states.start + t;
++                            let combo = &b.combos[copy as usize];
+                             let mut state = list[id as usize].clone();
+                             if let Some(slot) = state.get_mut("id") {
+                                 *slot = Tag::String(b.decl.id.as_str().into());
+                             }
++                            if !combo.is_empty() {
++                                add_nbt_properties(&mut state, combo);
++                            }
+                             list.push(state);
+                         }
+                     }
+                 }
+                 ("cached_shapes", Tag::IntArray(a)) if a.len() == self.states => {
+                     for b in &self.blocks {
+-                        let r = &b.rename.states;
+-                        let copy = a[r.start as usize..r.end as usize].to_vec();
++                        let start = b.rename.states.start;
++                        let copy: Vec<i32> = b
++                            .layout
++                            .iter()
++                            .map(|&(t, _)| a[(start + t) as usize])
++                            .collect();
+                         a.extend(copy);
+                     }
+                 }
+diff --git a/crates/horizon-mods/src/content.rs b/crates/horizon-mods/src/content.rs
+index 494e734..5d95068 100644
+--- a/crates/horizon-mods/src/content.rs
++++ b/crates/horizon-mods/src/content.rs
+@@ -83,6 +83,19 @@ struct BlockFile {
+     properties: BlockProperties,
+     #[serde(default = "yes")]
+     item: bool,
++    #[serde(default)]
++    state_properties: Vec<StateProperty>,
++}
++
++/// Fish: a state property a block adds to the ones of its template: its name,
++/// every value in order, and the default. The block's states are the
++/// template's, each once per combination of the added values.
++#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
++#[serde(deny_unknown_fields)]
++pub struct StateProperty {
++    pub name: String,
++    pub values: Vec<String>,
++    pub default: String,
+ }
+ fn yes() -> bool {
+     true
+@@ -99,6 +112,8 @@ pub struct Block {
+     pub properties: BlockProperties,
+     /// Also add a block item with the same id.
+     pub item: bool,
++    /// Fish: state properties added to the template's.
++    pub state_properties: Vec<StateProperty>,
+ }
+ 
+ #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+@@ -330,6 +345,7 @@ impl Content {
+                 template: file.template,
+                 properties: file.properties,
+                 item: file.item,
++                state_properties: file.state_properties,
+             });
+         }
+         for (item, name) in items {
+@@ -478,6 +494,7 @@ capabilities = ["registries"]
+                     ..BlockProperties::default()
+                 },
+                 item: true,
++                state_properties: Vec::new(),
+             }]
+         );
+         assert_eq!(content.items[0].id, "ruby:ruby");

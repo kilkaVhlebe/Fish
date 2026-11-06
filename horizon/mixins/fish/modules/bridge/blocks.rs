@@ -46,6 +46,18 @@ pub(in crate::game) fn built(game: &Game<'_>) {
     let states = (0..registry.len() as u32)
         .filter_map(|i| registry.state(BlockStateId(i)).map(|s| (i, s.name.as_str())));
     d.blocks_built(&fish_hooks::block_runs(states));
+    // The properties of the states content mods added: the loader reads and changes the state
+    // properties of Fish blocks with them.
+    let properties: Vec<(u32, String)> = (0..registry.len() as u32)
+        .filter_map(|i| {
+            let s = registry.state(BlockStateId(i))?;
+            (!s.name.starts_with("minecraft:")).then(|| {
+                let pairs = s.properties.iter().map(|(k, v)| (k.as_str(), v.as_str()));
+                (i, fish_hooks::properties_text(pairs))
+            })
+        })
+        .collect();
+    d.block_properties(&properties);
     BUILT.store(true, Ordering::Release);
 }
 

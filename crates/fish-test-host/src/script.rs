@@ -124,6 +124,10 @@ pub struct Expect {
     /// The states of Fish blocks: `"namespace:path" = [first, count]`.
     #[serde(default)]
     pub block_states: BTreeMap<String, [u32; 2]>,
+    /// The state properties of the Fish blocks at positions: `"x y z" = "level=2,lit=true"` (the
+    /// `k=v` pairs sorted by key, as the game reports them).
+    #[serde(default)]
+    pub block_properties: BTreeMap<String, String>,
     /// The result of the step's last `use_block`: `success` or `consume` (a Fish block handled the
     /// click), `fail` (it cancelled it) or `pass`.
     pub use_result: Option<String>,

@@ -110,6 +110,8 @@ exact point, the event is **approximated**; the notes say how.
 | sculk frequencies | **patch** `0009` in `sculk::frequency` | `Dispatch::sculk_frequency` first, the game's list after; vanilla game events only |
 | sound events of mods | content overlay + `ClientView::play_sound` (the bundle's `GameView`) | the mod's `sounds.json` reaches Horizon's sound registry through the content folder; `play_sound` plays through the window's `Audio` only when the registry knows the event; servers return false |
 | particle types of mods | none | registration and registry sync only; Horizon draws a closed set of particles, factories wait for P10 |
+| state properties of Fish blocks | **patch** `0010-block-state-properties.patch` on horizon-mods `content.rs` and `mod_content.rs` | a declaration's `state_properties` multiply the template's states in every per-state table of the overlay (facts, NBT tables, model states, render definitions); the bundle's `built` reports every Fish state's properties through `Dispatch::block_properties` |
+| block state writes | `ClientView::set_block_state` (the bundle's `GameView`) | `Game::level_set` on the integrated or dedicated server (neighbour updates, clients); a window refuses; writes of events without a game wait in the loader for the server's `tick_end` |
 
 A derived event whose own listeners are missing still raises its base event when a derived listener exists (a mod that
 listens only to `modify_send` still gets called).

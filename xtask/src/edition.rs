@@ -700,6 +700,18 @@ pub fn verify_content_log(log: &str) -> Result<()> {
     content_demo_lines(log, &["ruby sparkle raw id", "ruby chime played"])
 }
 
+/// Checks what the ruby lamp of `content_demo` logged while its state properties changed.
+pub fn verify_properties_log(log: &str) -> Result<()> {
+    content_demo_lines(
+        log,
+        &[
+            "ruby lamp lit at",
+            "ruby lamp level 1 at",
+            "ruby lamp goes out at",
+        ],
+    )
+}
+
 /// Checks what the `content_demo` mod logged during the e2e scenarios: the state ids Horizon gave
 /// its block, the late registration refusal, and the use, place and break of the ruby block.
 pub fn verify_blocks_log(log: &str) -> Result<()> {
@@ -1067,6 +1079,32 @@ pub fn e2e(
             "content_demo:ruby_block",
             Some("waxed"),
         )?;
+        // State properties of a block of a mod: the ruby lamp south of the ruby block is lit by a
+        // click, raises its level with a second one, and goes out when a block is set next to it
+        // (a neighbour change, written on the server's next tick).
+        let south = (ruby_at[2] + 1).to_string();
+        setblock(
+            [x.clone(), y.clone(), south.clone()],
+            "content_demo:ruby_lamp",
+        )?;
+        setblock([x.clone(), above.clone(), south.clone()], "minecraft:air")?;
+        ctl(horizon_ctl, &home, &["wait", "10"])?;
+        let lamp = |want: &[&str]| -> Result<()> {
+            let seen = ctl(horizon_ctl, &home, &["block", &x, &y, &south])?;
+            if !want.iter().all(|w| seen.contains(w)) {
+                bail!("the ruby lamp at {x} {y} {south} should have {want:?}: {seen}");
+            }
+            Ok(())
+        };
+        lamp(&["content_demo:ruby_lamp", "lit=false", "level=0"])?;
+        for want in ["lit=true", "level=1"] {
+            ctl(horizon_ctl, &home, &["interact", &x, &y, &south, "up"])?;
+            ctl(horizon_ctl, &home, &["wait", "10"])?;
+            lamp(&[want])?;
+        }
+        setblock([x.clone(), above.clone(), south.clone()], "minecraft:stone")?;
+        ctl(horizon_ctl, &home, &["wait", "10"])?;
+        lamp(&["lit=false", "level=1"])?;
         // A data reload, then the F3 screen (it lists `events-demo is listening`) for the screenshot.
         ctl(horizon_ctl, &home, &["command", "reload"])?;
         ctl(horizon_ctl, &home, &["wait", "40"])?;
@@ -1085,6 +1123,7 @@ pub fn e2e(
         verify_blocks_log(&log)?;
         verify_items_log(&log)?;
         verify_content_log(&log)?;
+        verify_properties_log(&log)?;
         if !shot.is_file() {
             bail!("no screenshot was written to {}", shot.display());
         }
@@ -1105,6 +1144,16 @@ pub fn e2e(
             bail!(
                 "the saved world lost the ruby block at {}: {block}",
                 at.join(" ")
+            );
+        }
+        // The lamp kept the state its properties were set to.
+        let south = (ruby_at[2] + 1).to_string();
+        let lamp = ctl(horizon_ctl, &home, &["block", &at[0], &at[1], &south])?;
+        if !(lamp.contains("content_demo:ruby_lamp") && lamp.contains("level=1")) {
+            bail!(
+                "the saved world lost the ruby lamp's state at {} {} {south}: {lamp}",
+                at[0],
+                at[1]
             );
         }
         let log = fs::read_to_string(home.join("logs/latest.log")).context("reading latest.log")?;

@@ -58,6 +58,10 @@ pub struct Sim {
     pub creative_json: String,
     /// The content tables, sounds and the last tool use of the simulated game.
     pub content: crate::content::ContentSim,
+    /// The states mods set at positions (a placed Fish block is in its default state until then).
+    pub block_states: std::collections::BTreeMap<[i32; 3], u32>,
+    /// The properties of every Fish block state (`k=v,...`), as the simulated game reports them.
+    pub state_properties: std::collections::BTreeMap<u32, String>,
 }
 
 impl Default for Sim {
@@ -84,6 +88,8 @@ impl Default for Sim {
             last_use: String::new(),
             creative_json: String::new(),
             content: crate::content::ContentSim::default(),
+            block_states: std::collections::BTreeMap::new(),
+            state_properties: std::collections::BTreeMap::new(),
             world: Some("world".to_string()),
             player: Some(PlayerSnapshot {
                 x: 0.5,
@@ -131,6 +137,23 @@ impl ClientView for SimView<'_> {
             .world
             .as_ref()
             .map(|w| world_dir(&self.dir, w).to_string_lossy().into_owned())
+    }
+
+    fn set_block_state(&mut self, pos: [i32; 3], state: u32) -> bool {
+        if !self.role.is_server() {
+            return false;
+        }
+        let Some(run) = self
+            .sim
+            .block_runs
+            .iter()
+            .find(|r| (r.first..r.first + r.count).contains(&state))
+        else {
+            return false;
+        };
+        self.sim.blocks.insert(pos, run.block.clone());
+        self.sim.block_states.insert(pos, state);
+        true
     }
 
     fn play_sound(&mut self, event: &str, at: Option<[f64; 3]>, volume: f32, pitch: f32) -> bool {

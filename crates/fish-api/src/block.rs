@@ -26,8 +26,10 @@
 //! ```
 //!
 //! The namespace of the identifier must be the id of the registering mod. The block takes as many
-//! states as its template has; a behaviour is called with the [`BlockContext`] of the block that
-//! raised the event. A panic in a callback stops the mod, like a panic in any other listener.
+//! states as its template has, times the combinations of the [`StateProperty`]s it adds; a
+//! behaviour is called with the [`BlockContext`] of the block that raised the event, which reads
+//! the state's properties and can put another state of the block in its place. A panic in a
+//! callback stops the mod, like a panic in any other listener.
 
 use std::ffi::c_void;
 use std::ops::Range;
@@ -56,6 +58,68 @@ pub struct BlockSettings {
     friction: Option<f32>,
     map_color: Option<u8>,
     sounds: Option<String>,
+    properties: Vec<StateProperty>,
+}
+
+/// A state property a block adds to the ones of its template (Fabric's `Property` in
+/// `appendProperties`): a boolean, a whole number in a range or one of a few words.
+///
+/// The block's states are the template's, each once per combination of the added values. Names
+/// and values are `[a-z0-9_]+`; a name may not be one of the template's properties (the game then
+/// refuses the content of every mod).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StateProperty {
+    name: String,
+    values: Vec<String>,
+    default: String,
+}
+
+impl StateProperty {
+    /// `false` or `true`, starting at `default` (`BooleanProperty`).
+    pub fn boolean(name: &str, default: bool) -> StateProperty {
+        StateProperty {
+            name: name.to_string(),
+            values: vec!["false".to_string(), "true".to_string()],
+            default: default.to_string(),
+        }
+    }
+
+    /// A whole number in `range`, starting at `default` (`IntegerProperty`; at most 64 values).
+    pub fn int(name: &str, range: std::ops::RangeInclusive<u32>, default: u32) -> StateProperty {
+        StateProperty {
+            name: name.to_string(),
+            values: range.map(|n| n.to_string()).collect(),
+            default: default.to_string(),
+        }
+    }
+
+    /// One of `values`, starting at `default` (`EnumProperty`).
+    pub fn enumeration<S: AsRef<str>>(
+        name: &str,
+        values: impl IntoIterator<Item = S>,
+        default: &str,
+    ) -> StateProperty {
+        StateProperty {
+            name: name.to_string(),
+            values: values.into_iter().map(|v| v.as_ref().to_string()).collect(),
+            default: default.to_string(),
+        }
+    }
+
+    /// The property's name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Every value, in order.
+    pub fn values(&self) -> &[String] {
+        &self.values
+    }
+
+    /// The default value.
+    pub fn default_value(&self) -> &str {
+        &self.default
+    }
 }
 
 impl BlockSettings {
@@ -71,7 +135,16 @@ impl BlockSettings {
             friction: None,
             map_color: None,
             sounds: None,
+            properties: Vec::new(),
         }
+    }
+
+    /// Adds a state property (see [`StateProperty`]). The game orders the block's states like
+    /// vanilla: every property (the template's and the added ones) sorted by name, the last name
+    /// changing fastest between neighbouring state ids.
+    pub fn property(mut self, property: StateProperty) -> Self {
+        self.properties.push(property);
+        self
     }
 
     /// Seconds of hand mining (`-1`: unbreakable).
@@ -240,6 +313,71 @@ impl BlockContext {
     /// The item in the acting hand (use, place), else empty.
     pub fn item(&self) -> &str {
         Self::text(self.0.item)
+    }
+
+    /// The state's properties, `k=v` pairs sorted by key and joined by commas: the template's and
+    /// the ones the mod added. Empty when the game did not report them.
+    pub fn properties(&self) -> &str {
+        let end = std::mem::offset_of!(BlockPayloadV1, properties) + size_of::<FishStr>();
+        if (self.0.size as usize) < end {
+            return "";
+        }
+        Self::text(self.0.properties)
+    }
+
+    /// The value of state property `name` (`"true"`, `"3"`, `"north"`), if the state has it.
+    pub fn property(&self, name: &str) -> Option<&str> {
+        self.properties()
+            .split(',')
+            .filter_map(|p| p.split_once('='))
+            .find(|(k, _)| *k == name)
+            .map(|(_, v)| v)
+    }
+
+    /// A boolean state property.
+    pub fn property_bool(&self, name: &str) -> Option<bool> {
+        self.property(name)?.parse().ok()
+    }
+
+    /// A whole-number state property.
+    pub fn property_int(&self, name: &str) -> Option<i64> {
+        self.property(name)?.parse().ok()
+    }
+
+    /// The state id of this block with property `name` set to `value`. `NOT_FOUND` for an
+    /// unknown property or value.
+    pub fn state_with(&self, name: &str, value: impl std::fmt::Display) -> Result<u32, Error> {
+        let (svc, host_ptr) = service::<BlockServiceV1>(SERVICE_BLOCK)?;
+        let value = value.to_string();
+        let mut out = 0u32;
+        // SAFETY: valid service table; the strings and the output outlive the call.
+        let status = unsafe {
+            (svc.with_property)(
+                host_ptr,
+                self.0.state,
+                FishStr::new(name),
+                FishStr::new(&value),
+                &mut out,
+            )
+        };
+        check("finding a block state", status)?;
+        Ok(out)
+    }
+
+    /// Puts the state with property `name` set to `value` where the block is (on the server; an
+    /// event without a game, a neighbour change or a tick, writes it on the server's next tick).
+    pub fn set_property(&self, name: &str, value: impl std::fmt::Display) -> Result<(), Error> {
+        let state = self.state_with(name, value)?;
+        self.set_state(state)
+    }
+
+    /// Puts block state `state` (one of a Fish block's) where the block is.
+    pub fn set_state(&self, state: u32) -> Result<(), Error> {
+        let (svc, host_ptr) = service::<BlockServiceV1>(SERVICE_BLOCK)?;
+        let [x, y, z] = self.0.pos;
+        // SAFETY: valid service table and host pointer.
+        let status = unsafe { (svc.set_state)(host_ptr, self.0.view, x, y, z, state) };
+        check("setting a block state", status)
     }
 }
 
@@ -411,6 +549,21 @@ impl Blocks {
     ) -> Result<Block, Error> {
         let (svc, host_ptr) = service::<BlockServiceV1>(SERVICE_BLOCK)?;
         let table = host::get()?;
+        let defaults = settings
+            .properties
+            .iter()
+            .map(|p| {
+                p.values
+                    .iter()
+                    .position(|v| *v == p.default)
+                    .ok_or_else(|| {
+                        Error::InvalidArgument(format!(
+                            "the default {:?} of state property {} is not one of its values",
+                            p.default, p.name
+                        ))
+                    })
+            })
+            .collect::<Result<Vec<usize>, Error>>()?;
         let abi = settings.abi();
         let mask = behaviour.mask();
         let (handler, user, drop_user) = if mask == 0 {
@@ -441,6 +594,23 @@ impl Blocks {
             return Err(Error::InvalidArgument("registries are frozen".to_string()));
         }
         check("registering a block", status)?;
+        for (p, default) in settings.properties.iter().zip(defaults) {
+            let values: Vec<FishStr> = p.values.iter().map(|v| FishStr::new(v)).collect();
+            let count = u32::try_from(values.len()).unwrap_or(u32::MAX);
+            // SAFETY: valid service table; the strings and the value list outlive the call.
+            let status = unsafe {
+                (svc.add_property)(
+                    host_ptr,
+                    table.mod_token,
+                    FishStr::new(id),
+                    FishStr::new(&p.name),
+                    values.as_ptr(),
+                    count,
+                    default as u32,
+                )
+            };
+            check("adding a state property", status)?;
+        }
         Ok(Block(id.to_string()))
     }
 

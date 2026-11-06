@@ -67,6 +67,16 @@ impl ClientView for GameView<'_, '_> {
         super::rules::world_of(self.game)
     }
 
+    // A block state written like `/setblock` does without `strict` (neighbour updates, clients).
+    // Only a game that owns its world writes: the integrated or dedicated server.
+    fn set_block_state(&mut self, pos: [i32; 3], state: u32) -> bool {
+        if role_of(self.game) == Role::Window {
+            return false;
+        }
+        let state = horizon_world::registry::BlockStateId(state);
+        self.game.level_set(pos, state).is_ok()
+    }
+
     // A sound event of `sounds.json` (the mods' own come from the content overlay), on this window's
     // audio. A server or a game without the event plays nothing.
     fn play_sound(&mut self, event: &str, at: Option<[f64; 3]>, volume: f32, pitch: f32) -> bool {

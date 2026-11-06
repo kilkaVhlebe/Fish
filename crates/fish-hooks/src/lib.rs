@@ -68,6 +68,12 @@ pub trait ClientView {
     fn world_id(&self) -> Option<String> {
         None
     }
+    /// Puts block state `state` at `pos`, with the updates a block change makes (neighbours,
+    /// clients). False where the game does not own the world (a window of a remote server) or
+    /// the write failed.
+    fn set_block_state(&mut self, _pos: [i32; 3], _state: u32) -> bool {
+        false
+    }
     /// Plays the sound event `event` (`namespace:path`): at the position when there is one, else
     /// on the listener. False when the game does not know the event or has no audio (a server).
     fn play_sound(
@@ -159,6 +165,45 @@ pub struct BlockDef {
     pub sounds: Option<String>,
     /// The events its mod handles: bit `1 << n` for the `n`th [`BlockEventKind`].
     pub events: u32,
+    /// State properties added to the template's, in declaration order (the game orders the
+    /// states by property name, the last name changing fastest, like vanilla).
+    pub properties: Vec<StatePropertyDef>,
+}
+
+/// A state property a mod added to a block (`fish:block` `add_property`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatePropertyDef {
+    /// The property's name, `[a-z0-9_]+`.
+    pub name: String,
+    /// Every value, in order (`false`, `true` for a boolean; the numbers of an integer range).
+    pub values: Vec<String>,
+    /// The index of the default value in `values`.
+    pub default: usize,
+}
+
+impl StatePropertyDef {
+    /// The default value.
+    pub fn default_value(&self) -> &str {
+        &self.values[self.default]
+    }
+}
+
+/// How many states each template state of a block becomes: the product of the value counts of
+/// its added properties (1 without any).
+pub fn property_combinations(properties: &[StatePropertyDef]) -> usize {
+    properties.iter().map(|p| p.values.len()).product()
+}
+
+/// The text of a state's properties as [`Dispatch::block_properties`] takes it: `k=v` pairs
+/// sorted by key, joined by commas (empty for a state without properties).
+pub fn properties_text<'a>(pairs: impl IntoIterator<Item = (&'a str, &'a str)>) -> String {
+    let mut pairs: Vec<(&str, &str)> = pairs.into_iter().collect();
+    pairs.sort_unstable();
+    pairs
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// The states Horizon gave one block: `first..first + count` (a block's states are one run).
@@ -1182,6 +1227,10 @@ pub trait Dispatch: Send + Sync {
     /// Horizon built its block states: `runs` holds one run per block content mods added. The
     /// loader keeps the ranges of the Fish blocks among them and finds a block by state id.
     fn blocks_built(&self, _runs: &[BlockRun]) {}
+    /// The properties of the states content mods added (`(state, "k=v,k2=v2")`, keys sorted),
+    /// after [`Dispatch::blocks_built`]: the loader reads and changes the state properties of
+    /// Fish blocks with them.
+    fn block_properties(&self, _states: &[(u32, String)]) {}
     /// True when `state` is one of a Fish block's states (cheap: hot paths ask before building
     /// an event).
     fn is_block_state(&self, _state: u32) -> bool {
@@ -1716,6 +1765,28 @@ mod tests {
         assert!(!tables.is_empty());
     }
 
+    #[test]
+    fn state_property_helpers_and_defaults() {
+        let p = |name: &str, values: &[&str], default| StatePropertyDef {
+            name: name.into(),
+            values: values.iter().map(|v| (*v).to_string()).collect(),
+            default,
+        };
+        let props = [
+            p("lit", &["false", "true"], 1),
+            p("level", &["0", "1", "2"], 0),
+        ];
+        assert_eq!(props[0].default_value(), "true");
+        assert_eq!(property_combinations(&props), 6);
+        assert_eq!(property_combinations(&[]), 1);
+        assert_eq!(
+            properties_text([("lit", "true"), ("axis", "y")]),
+            "axis=y,lit=true"
+        );
+        assert_eq!(properties_text(std::iter::empty()), "");
+        assert!(!View.set_block_state([0, 0, 0], 1));
+        Nothing.block_properties(&[(1, "a=b".into())]);
+    }
     #[test]
     fn transform_kinds_name_their_tool() {
         let named: Vec<(&str, &str)> = TransformKind::ALL

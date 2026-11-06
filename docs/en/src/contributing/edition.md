@@ -76,3 +76,9 @@ replaced.
 (`fish_lib::sculk_frequency`) and horizon-world's `level/data.rs` `cached` (the fire odds on the loaded `Behaviours`,
 after the snapshot, so the snapshot keeps vanilla's). Hooks cannot: `load_world_rest` and `Transformers::load` have
 macros and `?`, `sculk::frequency` has closures (`E_UNSUPPORTED_CONTROL_FLOW`), and the behaviours load in generic code.
+
+`0010-block-state-properties.patch` lets a block declaration of a content mod carry `state_properties` (a name, the
+values, the default) and makes `mod_content.rs` emit every template state once per combination of their values: the
+`facts.json` rows (state and description) and the NBT tables' `states` get the added properties, `cached_shapes`
+repeats, `model-states.json` gets the schema and possible states, `render-definitions.json` the ids and the default.
+Without added properties it changes nothing. It is not a hook site: the overlay builder is one private plan.

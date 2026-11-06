@@ -78,3 +78,10 @@ cargo xtask edition regressions                # собственные тест
 (`fish_lib::sculk_frequency`) и `cached` в horizon-world `level/data.rs` (шансы огня в загруженных `Behaviours` после
 снимка, так что снимок хранит ванильные). Хуки не справятся: в `load_world_rest` и `Transformers::load` есть макросы и
 `?`, в `sculk::frequency` — замыкания (`E_UNSUPPORTED_CONTROL_FLOW`), а поведения загружаются в обобщённом коде.
+
+`0010-block-state-properties.patch` позволяет объявлению блока контент-мода нести `state_properties` (имя, значения,
+значение по умолчанию) и заставляет `mod_content.rs` выдавать каждое состояние шаблона по разу на комбинацию их
+значений: строки `facts.json` (состояние и описание) и `states` NBT-таблиц получают добавленные свойства,
+`cached_shapes` повторяется, `model-states.json` получает схему и возможные состояния, `render-definitions.json` — id и
+значение по умолчанию. Без добавленных свойств он ничего не меняет. Это не точка хука: построитель оверлея — один
+приватный план.

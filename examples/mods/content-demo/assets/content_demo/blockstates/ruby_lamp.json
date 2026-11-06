@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "lit=false": {
+      "model": "content_demo:block/ruby_lamp"
+    },
+    "lit=true": {
+      "model": "content_demo:block/ruby_lamp_on"
+    }
+  }
+}

@@ -296,6 +296,7 @@ impl TestHost {
             .push(format!("{} {} {} {block}", pos[0], pos[1], pos[2]));
         let state = self.fish_state(pos);
         self.sim.blocks.remove(&pos);
+        self.sim.block_states.remove(&pos);
         if let Some(state) = state {
             self.fish_block_changed(fish_hooks::BlockEventKind::Broken, state, pos, PLAYER);
         }
