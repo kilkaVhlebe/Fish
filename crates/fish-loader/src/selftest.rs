@@ -156,12 +156,79 @@ pub fn run(loader: &Loader, dispatch: &LoaderDispatch) -> SelftestReport {
             );
         }
     }
+    if report.mods.iter().any(|m| m.id == "content_demo") {
+        content_checks(&mut checks, dispatch);
+    }
     let ok = checks.iter().all(|c| c.ok);
     SelftestReport {
         boot: report,
         ok,
         checks,
     }
+}
+
+/// The checks of phase P8 when the example mod `content_demo` is loaded: its blocks (one with
+/// state properties), the content folder the loader writes for Horizon, the content tables, the
+/// sound event and the particle type, all through the dispatcher the hooks use.
+fn content_checks(checks: &mut Vec<Check>, dispatch: &LoaderDispatch) {
+    use fish_hooks::Dispatch;
+    let mut blocks = Vec::new();
+    dispatch.blocks(&mut blocks);
+    let lamp = blocks.iter().find(|b| b.id == "content_demo:ruby_lamp");
+    let lamp_properties: Vec<&str> = lamp
+        .map(|b| b.properties.iter().map(|p| p.name.as_str()).collect())
+        .unwrap_or_default();
+    check(
+        checks,
+        "content_blocks",
+        blocks.len() >= 6 && lamp_properties == ["lit", "level"],
+        format!(
+            "{} block(s), lamp properties {lamp_properties:?}",
+            blocks.len()
+        ),
+    );
+    let folders = dispatch.block_content();
+    let folder = folders.iter().find(|f| {
+        f.join("data/content_demo/horizon/block/ruby_lamp.json")
+            .is_file()
+    });
+    let declaration = folder
+        .and_then(|f| {
+            std::fs::read_to_string(f.join("data/content_demo/horizon/block/ruby_lamp.json")).ok()
+        })
+        .unwrap_or_default();
+    let assets = folder.is_some_and(|f| {
+        [
+            "assets/content_demo/sounds.json",
+            "assets/content_demo/sounds/ruby_chime.ogg",
+            "assets/content_demo/particles/ruby_sparkle.json",
+            "assets/content_demo/blockstates/ruby_lamp.json",
+        ]
+        .iter()
+        .all(|p| f.join(p).is_file())
+    });
+    check(
+        checks,
+        "content_folder",
+        declaration.contains("\"state_properties\"") && assets,
+        format!("{} folder(s), assets {assets}", folders.len()),
+    );
+    let tables = dispatch.content_tables();
+    let (mut sounds, mut particles) = (Vec::new(), Vec::new());
+    dispatch.sound_events(&mut sounds);
+    dispatch.particle_types(&mut particles);
+    check(
+        checks,
+        "content_tables",
+        tables.fuels.len() == 1
+            && tables.transforms.len() == 2
+            && dispatch.sculk_frequency("minecraft:eat") == Some(12)
+            && sounds.iter().any(|s| s.id == "content_demo:ruby_chime")
+            && particles
+                .iter()
+                .any(|p| p.id == "content_demo:ruby_sparkle"),
+        crate::tables::summary(&tables, sounds.len(), particles.len()),
+    );
 }
 
 /// Runs the self test and writes the JSON report to `path`; returns the process exit code.

@@ -7,7 +7,7 @@ cargo xtask edition stage            # copy source + fish crates, edit Cargo.tom
 cargo xtask edition mixins           # assemble the bundle, horizon-mixins apply
 cargo xtask edition build --profile fast
 cargo xtask edition package --profile fast     # dist/fish-edition-….zip
-cargo xtask edition selftest --profile fast    # runs the binary with hello.fish
+cargo xtask edition selftest --profile fast    # runs the binary with hello.fish and content_demo.fish
 cargo xtask edition all --profile fast         # all of the above
 cargo xtask edition regressions                # Horizon's own tests: pristine vs staged
 ```
@@ -82,3 +82,13 @@ values, the default) and makes `mod_content.rs` emit every template state once p
 `facts.json` rows (state and description) and the NBT tables' `states` get the added properties, `cached_shapes`
 repeats, `model-states.json` gets the schema and possible states, `render-definitions.json` the ids and the default.
 Without added properties it changes nothing. It is not a hook site: the overlay builder is one private plan.
+
+## The self test and the in-game test
+
+`edition selftest` starts the built binary with `FISH_LOADER_ADD_MODS` (`hello` and `content_demo`) and
+`FISH_LOADER_SELFTEST`: the loader boots inside the edition, runs 20 synthetic ticks, a frame, a HUD pass and a command,
+and writes a report before the game opens a window. Besides the hello checks it has `content_blocks` (the example's
+blocks and the lamp's state properties), `content_folder` (the content folder for Horizon with declarations, sounds,
+particles and blockstates) and `content_tables`. `cargo xtask e2e --resources <26.3 folder> --horizon-ctl <path>` drives
+a real game window through horizon-ctl and checks the events, game rules, blocks, items, content tables, sounds and state
+properties of the example mods in `latest.log` and in the world, then reopens the saved world.

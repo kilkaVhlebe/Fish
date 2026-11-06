@@ -7,7 +7,7 @@ cargo xtask edition stage            # копия исходников + кре�
 cargo xtask edition mixins           # сборка пакета, horizon-mixins apply
 cargo xtask edition build --profile fast
 cargo xtask edition package --profile fast     # dist/fish-edition-….zip
-cargo xtask edition selftest --profile fast    # запускает бинарник с hello.fish
+cargo xtask edition selftest --profile fast    # запускает бинарник с hello.fish и content_demo.fish
 cargo xtask edition all --profile fast         # всё перечисленное
 cargo xtask edition regressions                # собственные тесты Horizon: pristine против staged
 ```
@@ -85,3 +85,13 @@ cargo xtask edition regressions                # собственные тест
 `cached_shapes` повторяется, `model-states.json` получает схему и возможные состояния, `render-definitions.json` — id и
 значение по умолчанию. Без добавленных свойств он ничего не меняет. Это не точка хука: построитель оверлея — один
 приватный план.
+
+## Самопроверка и внутриигровой тест
+
+`edition selftest` запускает собранный бинарник с `FISH_LOADER_ADD_MODS` (`hello` и `content_demo`) и
+`FISH_LOADER_SELFTEST`: загрузчик стартует внутри edition, прогоняет 20 синтетических тиков, кадр, проход HUD и команду и
+пишет отчёт, прежде чем игра откроет окно. Кроме проверок hello в нём есть `content_blocks` (блоки примера и свойства
+состояния лампы), `content_folder` (папка контента для Horizon с объявлениями, звуками, частицами и blockstates) и
+`content_tables`. `cargo xtask e2e --resources <папка 26.3> --horizon-ctl <путь>` управляет настоящим окном игры через
+horizon-ctl, проверяет события, игровые правила, блоки, предметы, таблицы контента, звуки и свойства состояния модов-
+примеров в `latest.log` и в мире, а затем снова открывает сохранённый мир.

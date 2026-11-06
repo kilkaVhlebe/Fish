@@ -462,6 +462,9 @@ pub fn selftest(root: &Path, cfg: &FishConfig, profile: Profile) -> Result<serde
         );
     }
     let hello = build_hello(root)?;
+    // The example of phase P8 too: the self test checks its blocks, content folder and tables.
+    let content = build_example_mod(root, "content-demo", "content_demo-0.1.0.fish")?;
+    let mods = std::env::join_paths([&hello, &content]).context("joining the mod paths")?;
     let scratch = root.join("target/selftest");
     if scratch.exists() {
         fs::remove_dir_all(&scratch)?;
@@ -470,7 +473,7 @@ pub fn selftest(root: &Path, cfg: &FishConfig, profile: Profile) -> Result<serde
     let report_path = scratch.join("report.json");
     let output = Command::new(&binary)
         .env("HORIZON_HOME", scratch.join("home"))
-        .env("FISH_LOADER_ADD_MODS", &hello)
+        .env("FISH_LOADER_ADD_MODS", &mods)
         .env("FISH_LOADER_SELFTEST", &report_path)
         .stdin(Stdio::null())
         .output()
@@ -572,7 +575,10 @@ pub fn verify_report(report: &serde_json::Value, cfg: &FishConfig) -> Result<()>
     if report["ok"] != true {
         bail!("the self test reported failures: {}", report["checks"]);
     }
-    if report["mods"][0]["id"] != "hello" || report["mods"][0]["status"] != "ok" {
+    let hello_ok = report["mods"]
+        .as_array()
+        .is_some_and(|m| m.iter().any(|m| m["id"] == "hello" && m["status"] == "ok"));
+    if !hello_ok {
         bail!("hello did not load: {}", report["mods"]);
     }
     if report["checks"]
@@ -580,6 +586,17 @@ pub fn verify_report(report: &serde_json::Value, cfg: &FishConfig) -> Result<()>
         .is_none_or(|c| c.is_empty() || c.iter().any(|c| c["ok"] != true))
     {
         bail!("a check failed: {}", report["checks"]);
+    }
+    for name in ["content_blocks", "content_folder", "content_tables"] {
+        if !report["checks"]
+            .as_array()
+            .is_some_and(|c| c.iter().any(|c| c["name"] == name && c["ok"] == true))
+        {
+            bail!(
+                "the self test has no passing {name} check: {}",
+                report["checks"]
+            );
+        }
     }
     if report["fish"] != cfg.version.as_str() {
         bail!(
@@ -1491,7 +1508,12 @@ mod tests {
         let good = serde_json::json!({
             "ok": true, "fish": "0.1.0",
             "mods": [{"id": "hello", "status": "ok"}],
-            "checks": [{"name": "x", "ok": true}]
+            "checks": [
+                {"name": "x", "ok": true},
+                {"name": "content_blocks", "ok": true},
+                {"name": "content_folder", "ok": true},
+                {"name": "content_tables", "ok": true}
+            ]
         });
         assert!(verify_report(&good, &c).is_ok());
         let mut bad = good.clone();
@@ -1513,6 +1535,14 @@ mod tests {
         let mut bad = good.clone();
         bad["checks"] = serde_json::json!([]);
         assert!(verify_report(&bad, &c).is_err());
+        let mut bad = good.clone();
+        bad["checks"] = serde_json::json!([{"name": "x", "ok": true}]);
+        assert!(
+            verify_report(&bad, &c)
+                .unwrap_err()
+                .to_string()
+                .contains("no passing content_blocks")
+        );
         let mut bad = good;
         bad["fish"] = "9.9.9".into();
         assert!(
