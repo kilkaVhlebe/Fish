@@ -67,6 +67,7 @@ logs = ["refusing to break bedrock"]
 | `use_item = { item, hand }`, `use_entity = { id, type, item }` | предмет используется в воздухе / на сущности (вызовы предметов Fish) |
 | `finish_using = { item }` | съедобное доедено (`on_finish_using`) |
 | `inventory_tick = { item, slot, selected }` | один тик инвентаря для стопки (`on_inventory_tick`) |
+| `use_tool = { tool, block }` | `axe`, `hoe`, `shovel` или `honeycomb` на блоке с воздухом сверху, по симулированным таблицам преобразователей (`expect.tool_result`) |
 | `attack_block = { pos, block }`, `attack_entity = { id, type }` | атаки |
 | `break_block = { pos, block }` | `block_break_before`; `after` приходит на следующем `server_ticks` |
 | `damage = { id, type, amount, source }`, `death = { id, type }` | события сущностей |
@@ -86,3 +87,11 @@ logs = ["refusing to break bedrock"]
 добавляет предмету), `creative_tabs` (имеющиеся вкладки Fish), `creative_entries` (предметы, присутствующие во вкладке)
 и `no_creative_entries` (предметы, которых во вкладке быть не должно). См. [предметы](item.md) и
 [группы предметов](item_group.md).
+
+Ожидания для контента: `fuels` (`"item" = тики`, 0 — не топливо), `compostables` (`"item" = 0.5`), `flammables`
+(`"block" = [воспламенение, сгорание]`), `path_types` (`"block" = "DAMAGING"`), `sculk_frequencies`
+(`"minecraft:eat" = 12`), `sounds` и `particles` (зарегистрированные id), `played_sounds` (подстроки
+`id at x y z volume v pitch p`) и `tool_result` (что оставил `use_tool` шага, `none`, если ничего). Симулированная игра
+начинает с небольших ванильных заготовок (уголь и палки горят, яблоки компостируются, топор обтёсывает дубовые брёвна,
+доски горят) и применяет записи модов теми же функциями, что и edition. См. [таблицы контента](content.md),
+[звуковые события](sound.md) и [типы частиц](particle.md).

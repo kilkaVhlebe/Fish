@@ -76,6 +76,10 @@ impl ClientHandle {
         ClientHandle(handle)
     }
 
+    pub(crate) fn raw(&self) -> FishHandle {
+        self.0
+    }
+
     /// The game's role.
     pub fn role(&self) -> Result<Role, Error> {
         let (svc, host) = service::<ClientServiceV1>(ids::CLIENT)?;

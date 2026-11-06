@@ -27,5 +27,8 @@
   - [Блоки](modders/block.md)
   - [Предметы](modders/item.md)
   - [Группы предметов](modders/item_group.md)
+  - [Таблицы контента](modders/content.md)
+  - [Звуковые события](modders/sound.md)
+  - [Типы частиц](modders/particle.md)
 - [Инструменты](modders/tooling.md)
 - [Тестирование](modders/testing.md)

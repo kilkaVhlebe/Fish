@@ -730,3 +730,82 @@ pub fn requeue_play_out(mut held: Vec<PlayOut>) {
     held.append(&mut out);
     *out = held;
 }
+
+// ---- Content tables (fish:content), from patch 0009 ----
+//
+// The game builds its own tables once, while it loads its resources; the entries mods registered
+// are applied to them there. `fish_loader::tables` turns an entry into the data Horizon reads, the
+// same way for the test host.
+
+fn content_tables() -> Option<fish_hooks::ContentTables> {
+    let tables = fish_hooks::get()?.content_tables();
+    (!tables.is_empty()).then_some(tables)
+}
+
+/// `load_world_rest`, right after the item table is read: the fuels and compostable items mods
+/// registered. Zero removes the property; an item the game does not know is skipped.
+pub fn content_items(items: &mut crate::items::Items) {
+    let Some(tables) = content_tables() else { return };
+    let mut applied = 0;
+    for f in &tables.fuels {
+        let Some(info) = items.items.get_mut(f.item.as_str()) else {
+            log::warn!("Fish: mod {} made {} a fuel, but the game has no such item", f.mod_id, f.item);
+            continue;
+        };
+        info.fuel = (f.burn_ticks > 0).then(|| fish_loader::tables::fuel_components(f.burn_ticks));
+        applied += 1;
+    }
+    for c in &tables.compostables {
+        let Some(info) = items.items.get_mut(c.item.as_str()) else {
+            log::warn!("Fish: mod {} made {} compostable, but the game has no such item", c.mod_id, c.item);
+            continue;
+        };
+        info.compostable = (c.chance > 0.0).then(|| fish_loader::tables::compost_layers(c.chance));
+        applied += 1;
+    }
+    if applied > 0 {
+        log::info!("Fish content tables: {applied} item entr(ies) applied");
+    }
+}
+
+/// `load_world_rest`, right after the mob data is read: the pathfinding types mods gave blocks,
+/// for every state of the block.
+pub fn content_mobs(data: &mut crate::mobs::MobData, facts: &crate::blocks::BlockFacts) {
+    let Some(tables) = content_tables() else { return };
+    if tables.path_types.is_empty() || data.states.len() != facts.states.len() {
+        return;
+    }
+    let mut states = 0;
+    for p in &tables.path_types {
+        let kind = crate::mobs::path::PathType::from_name(&p.path_type);
+        let mut found = false;
+        for (i, s) in facts.states.iter().enumerate() {
+            if &*s.name == p.block.as_str() {
+                data.states[i].path = kind;
+                found = true;
+                states += 1;
+            }
+        }
+        if !found {
+            log::warn!("Fish: mod {} gave {} a path type, but the game has no such block", p.mod_id, p.block);
+        }
+    }
+    if states > 0 {
+        log::info!("Fish content tables: path types of {states} block state(s) applied");
+    }
+}
+
+/// `Transformers::load`, for each block transformer file (`axe`, `hoe`, `shovel`): the tool
+/// actions mods registered, after the vanilla ones.
+pub fn transformer_list(tool: &str, list: &mut serde_json::Value) {
+    let Some(tables) = content_tables() else { return };
+    let added = fish_loader::tables::patch_transformers(tool, list, &tables);
+    if added > 0 {
+        log::info!("Fish content tables: {added} {tool} action(s) added");
+    }
+}
+
+/// `sculk::frequency` (patch 0009): the frequency a mod gave the game event, if one did.
+pub fn sculk_frequency(event: &str) -> Option<i32> {
+    fish_hooks::get()?.sculk_frequency(event).map(i32::from)
+}

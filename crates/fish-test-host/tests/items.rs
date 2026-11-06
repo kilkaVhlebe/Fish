@@ -224,7 +224,10 @@ fn creative_tabs_are_added_and_entries_reach_vanilla_tabs_and_search() {
             RUBY,
             SNACK,
             "content_demo:ruby_block",
-            "content_demo:raw_ruby"
+            "content_demo:raw_ruby",
+            "content_demo:ruby_log",
+            "content_demo:stripped_ruby_log",
+            "content_demo:waxed_ruby_block"
         ]
     );
     assert_eq!(

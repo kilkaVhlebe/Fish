@@ -148,6 +148,42 @@ pub struct Expect {
     /// Items a creative tab must not list.
     #[serde(default)]
     pub no_creative_entries: BTreeMap<String, Vec<String>>,
+    /// Burn times in a furnace: `"item" = ticks` (0: not a fuel).
+    #[serde(default)]
+    pub fuels: BTreeMap<String, u32>,
+    /// The chance an item adds a composter layer: `"item" = 0.65` (0: not compostable).
+    #[serde(default)]
+    pub compostables: BTreeMap<String, f32>,
+    /// Fire odds of blocks: `"block" = [ignite, burn]` (`[0, 0]`: does not burn).
+    #[serde(default)]
+    pub flammables: BTreeMap<String, [i32; 2]>,
+    /// Pathfinding types of blocks: `"block" = "DAMAGING"`.
+    #[serde(default)]
+    pub path_types: BTreeMap<String, String>,
+    /// Vibration frequencies of game events: `"minecraft:step" = 1`.
+    #[serde(default)]
+    pub sculk_frequencies: BTreeMap<String, u8>,
+    /// Sound events that must be registered.
+    #[serde(default)]
+    pub sounds: Vec<String>,
+    /// Particle types that must be registered.
+    #[serde(default)]
+    pub particles: Vec<String>,
+    /// Substrings of sounds mods played (`id at x y z volume v pitch p`).
+    #[serde(default)]
+    pub played_sounds: Vec<String>,
+    /// The block the step's `use_tool` left (`none` when the tool did nothing).
+    pub tool_result: Option<String>,
+}
+
+/// A tool used on a block: `axe`, `hoe`, `shovel` or `honeycomb`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolStep {
+    /// The tool.
+    pub tool: String,
+    /// The block it is used on (with air above).
+    pub block: String,
 }
 
 fn stone() -> String {
@@ -444,6 +480,8 @@ pub struct Step {
     pub attack_block: Option<BlockStep>,
     /// The player attacks an entity.
     pub attack_entity: Option<EntityStep>,
+    /// A tool is used on a block (content tables).
+    pub use_tool: Option<ToolStep>,
     /// The player breaks a block.
     pub break_block: Option<BlockStep>,
     /// The player places a block in the simulated world.
@@ -585,6 +623,9 @@ fn game_actions(host: &mut TestHost, step: &Step) {
     }
     if let Some(e) = &step.attack_entity {
         host.attack_entity(e.id, &e.kind);
+    }
+    if let Some(t) = &step.use_tool {
+        host.use_tool(&t.tool, &t.block);
     }
     if let Some(b) = &step.break_block {
         host.break_block(b.pos, &b.block);
@@ -810,6 +851,9 @@ pub fn run(host: &mut TestHost, script: &Script) -> Result<(), ScriptFailure> {
             });
         }
         if let Some(failure) = host.check_blocks(n, expect) {
+            return Err(failure);
+        }
+        if let Some(failure) = host.check_content(n, expect) {
             return Err(failure);
         }
         if let Some(failure) = host.check_items(n, expect) {

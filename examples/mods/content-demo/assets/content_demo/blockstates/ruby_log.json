@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "axis=x": {
+      "model": "content_demo:block/ruby_log",
+      "x": 90,
+      "y": 90
+    },
+    "axis=y": {
+      "model": "content_demo:block/ruby_log"
+    },
+    "axis=z": {
+      "model": "content_demo:block/ruby_log",
+      "x": 90
+    }
+  }
+}

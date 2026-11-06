@@ -136,6 +136,8 @@ pub(crate) struct Inner {
     pub items: Mutex<crate::items::ItemStore>,
     /// Creative tabs mods registered and the entries they added to tabs.
     pub groups: Mutex<crate::items::GroupStore>,
+    /// Content table entries, sound events and particle types mods registered.
+    pub content: Mutex<crate::content::ContentStore>,
     /// Chat notices not shown yet (`Fish mod X stopped: reason`).
     pub notices: Mutex<Vec<String>>,
 }
@@ -201,6 +203,7 @@ impl Inner {
                 blocks: Mutex::default(),
                 items: Mutex::default(),
                 groups: Mutex::default(),
+                content: Mutex::default(),
                 notices: Mutex::default(),
             }
         })
@@ -302,6 +305,10 @@ impl Drop for Inner {
             .clear();
         self.items.lock().unwrap_or_else(|e| e.into_inner()).clear();
         self.groups
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.content
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();

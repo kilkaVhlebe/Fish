@@ -8,6 +8,7 @@
 #![deny(missing_docs)]
 
 pub mod blocks;
+pub mod content;
 pub mod events;
 pub mod gamerules;
 pub mod items;
@@ -120,6 +121,7 @@ impl TestHost {
         self.loader = Some(loader);
         self.build_blocks();
         self.build_creative();
+        self.build_content();
         Ok(self)
     }
 

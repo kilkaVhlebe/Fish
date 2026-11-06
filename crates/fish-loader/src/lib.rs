@@ -18,6 +18,8 @@ mod bus;
 mod client_services;
 mod command_services;
 mod commands;
+mod content;
+mod content_services;
 mod discovery;
 mod dispatch;
 pub mod edition;
@@ -34,6 +36,7 @@ mod net_services;
 mod registry_services;
 mod report;
 pub mod selftest;
+pub mod tables;
 
 pub use boot::{BootConfig, BootError, Loader, ModSummary, boot};
 pub use bus::{DEFAULT_PHASE, EventBus, EventIndex};

@@ -66,6 +66,16 @@ impl ClientView for GameView<'_, '_> {
     fn world_id(&self) -> Option<String> {
         super::rules::world_of(self.game)
     }
+
+    // A sound event of `sounds.json` (the mods' own come from the content overlay), on this window's
+    // audio. A server or a game without the event plays nothing.
+    fn play_sound(&mut self, event: &str, at: Option<[f64; 3]>, volume: f32, pitch: f32) -> bool {
+        if !self.game.native_window() || !self.game.audio.engine.registry.contains(event) {
+            return false;
+        }
+        self.game.audio.play(event, at, volume, pitch);
+        true
+    }
 }
 
 /// A read-only copy of what the HUD pass needs, so the draw target can borrow the game.

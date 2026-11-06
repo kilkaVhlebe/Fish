@@ -103,6 +103,13 @@ exact point, the event is **approximated**; the notes say how.
 | `inventory_tick` (items of Fish) | extends the `tick_start` hook | every stack of Fish items in the inventory, armor and off hand of the local player, only when some item handles the event |
 | `append_tooltip` (items of Fish) | RETURN `Game::stack_tooltip` | the lines are added in gray after the vanilla ones; a crossbow's nested projectile (`stack_tooltip_lines`) is not covered |
 | creative tabs and entries | **patch** `0008-creative-inventory.patch` on `Creative::load` | `Dispatch::creative_inventory` rewrites the text of `creative-inventory.json` before it becomes tabs (once, when the resources load) |
+| fuel, composting (`fish:content`) | **patch** `0009-content-tables.patch` in `load_world_rest` | `fish_lib::content_items` sets the `cooking_fuel` and `compostable` data of the item table from `Dispatch::content_tables` (`fish_loader::tables`), right after it is read |
+| tool actions (strip, till, flatten, wax, scrape) | **patch** `0009` in `Transformers::load` | `fish_lib::transformer_list` appends the mods' entries to each parsed `block_transformer/<tool>.json`, after the vanilla ones |
+| fire odds | **patch** `0009` in horizon-world `level/data.rs` `cached` | the odds are set on the loaded `Behaviours` after the snapshot is stored or restored, so the snapshot keeps vanilla's; the client's fire visuals are not covered |
+| path types of blocks | **patch** `0009` in `load_world_rest` | `fish_lib::content_mobs` sets the type of every state of the block in `MobData` |
+| sculk frequencies | **patch** `0009` in `sculk::frequency` | `Dispatch::sculk_frequency` first, the game's list after; vanilla game events only |
+| sound events of mods | content overlay + `ClientView::play_sound` (the bundle's `GameView`) | the mod's `sounds.json` reaches Horizon's sound registry through the content folder; `play_sound` plays through the window's `Audio` only when the registry knows the event; servers return false |
+| particle types of mods | none | registration and registry sync only; Horizon draws a closed set of particles, factories wait for P10 |
 
 A derived event whose own listeners are missing still raises its base event when a derived listener exists (a mod that
 listens only to `modify_send` still gets called).

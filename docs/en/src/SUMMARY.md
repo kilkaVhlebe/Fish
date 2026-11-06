@@ -27,5 +27,8 @@
   - [Blocks](modders/block.md)
   - [Items](modders/item.md)
   - [Item groups](modders/item_group.md)
+  - [Content tables](modders/content.md)
+  - [Sound events](modders/sound.md)
+  - [Particle types](modders/particle.md)
 - [Tooling](modders/tooling.md)
 - [Testing](modders/testing.md)

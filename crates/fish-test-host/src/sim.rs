@@ -56,6 +56,8 @@ pub struct Sim {
     pub last_use: String,
     /// The creative inventory (`creative-inventory.json` text) the loader built at boot.
     pub creative_json: String,
+    /// The content tables, sounds and the last tool use of the simulated game.
+    pub content: crate::content::ContentSim,
 }
 
 impl Default for Sim {
@@ -81,6 +83,7 @@ impl Default for Sim {
             block_dirs: Vec::new(),
             last_use: String::new(),
             creative_json: String::new(),
+            content: crate::content::ContentSim::default(),
             world: Some("world".to_string()),
             player: Some(PlayerSnapshot {
                 x: 0.5,
@@ -128,6 +131,17 @@ impl ClientView for SimView<'_> {
             .world
             .as_ref()
             .map(|w| world_dir(&self.dir, w).to_string_lossy().into_owned())
+    }
+
+    fn play_sound(&mut self, event: &str, at: Option<[f64; 3]>, volume: f32, pitch: f32) -> bool {
+        if self.role.is_server() || !self.sim.content.known_sounds.contains(event) {
+            return false;
+        }
+        self.sim.content.played_sounds.push(match at {
+            Some([x, y, z]) => format!("{event} at {x} {y} {z} volume {volume} pitch {pitch}"),
+            None => format!("{event} volume {volume} pitch {pitch}"),
+        });
+        true
     }
 }
 

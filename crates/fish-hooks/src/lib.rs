@@ -68,6 +68,17 @@ pub trait ClientView {
     fn world_id(&self) -> Option<String> {
         None
     }
+    /// Plays the sound event `event` (`namespace:path`): at the position when there is one, else
+    /// on the listener. False when the game does not know the event or has no audio (a server).
+    fn play_sound(
+        &mut self,
+        _event: &str,
+        _at: Option<[f64; 3]>,
+        _volume: f32,
+        _pitch: f32,
+    ) -> bool {
+        false
+    }
 }
 
 /// Who typed a command.
@@ -411,6 +422,177 @@ pub struct ItemGroupAddition {
     pub mod_id: String,
     /// The items, in order.
     pub entries: Vec<String>,
+}
+
+/// A furnace fuel a mod registered (`fish:content`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FuelDef {
+    /// The item, a vanilla one or a mod's.
+    pub item: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+    /// How long it burns, in ticks; zero removes the fuel property of the item.
+    pub burn_ticks: u32,
+}
+
+/// A compostable item a mod registered (`fish:content`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompostDef {
+    /// The item.
+    pub item: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+    /// The probability that an item adds a layer, `(0, 1]`; zero removes the property.
+    pub chance: f32,
+}
+
+/// The fire odds of a block a mod registered (`fish:content`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlammableDef {
+    /// The block.
+    pub block: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+    /// How easily fire spreads onto the block.
+    pub ignite_odds: i32,
+    /// How easily fire consumes the block.
+    pub burn_odds: i32,
+}
+
+/// What a tool does to a block (`fish:content` `transform`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransformKind {
+    /// An axe strips a block (logs).
+    Strip,
+    /// A hoe tills a block (farmland).
+    Till,
+    /// A shovel flattens a block (dirt path).
+    Flatten,
+    /// Honeycomb waxes a block; an axe scrapes the wax off.
+    Wax,
+    /// An axe scrapes one step of oxidation off a block.
+    Oxidize,
+}
+
+impl TransformKind {
+    /// Every kind, in the order of the ABI's values.
+    pub const ALL: [TransformKind; 5] = [
+        TransformKind::Strip,
+        TransformKind::Till,
+        TransformKind::Flatten,
+        TransformKind::Wax,
+        TransformKind::Oxidize,
+    ];
+
+    /// The kind an ABI value stands for.
+    pub fn from_u8(value: u8) -> Option<TransformKind> {
+        Self::ALL.get(usize::from(value)).copied()
+    }
+
+    /// The word of the ABI (`strip`, `till`, `flatten`, `wax`, `oxidize`).
+    pub fn name(self) -> &'static str {
+        match self {
+            TransformKind::Strip => "strip",
+            TransformKind::Till => "till",
+            TransformKind::Flatten => "flatten",
+            TransformKind::Wax => "wax",
+            TransformKind::Oxidize => "oxidize",
+        }
+    }
+
+    /// The block transformer of the game the kind belongs to: `axe`, `hoe` or `shovel` (waxing
+    /// is the axe's, which takes the wax off again).
+    pub fn tool(self) -> &'static str {
+        match self {
+            TransformKind::Strip | TransformKind::Wax | TransformKind::Oxidize => "axe",
+            TransformKind::Till => "hoe",
+            TransformKind::Flatten => "shovel",
+        }
+    }
+}
+
+/// A tool action a mod registered (`fish:content` `transform`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransformDef {
+    /// What the tool does.
+    pub kind: TransformKind,
+    /// The block before (the unwaxed or less oxidized block for `Wax` and `Oxidize`).
+    pub from: String,
+    /// The block after.
+    pub to: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+}
+
+/// The pathfinding type of a block a mod registered (`fish:content`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PathTypeDef {
+    /// The block.
+    pub block: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+    /// The type's name (`DAMAGING`, `WALKABLE`; see `fish_abi::content::path_type::NAMES`).
+    pub path_type: String,
+}
+
+/// The vibration frequency of a game event a mod registered (`fish:content`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SculkFrequencyDef {
+    /// The game event, `minecraft:step`.
+    pub event: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+    /// The frequency, `0..=15`.
+    pub frequency: u8,
+}
+
+/// Every content table entry of the mods that are on (`fish:content`), in registration order.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ContentTables {
+    /// Furnace fuels.
+    pub fuels: Vec<FuelDef>,
+    /// Compostable items.
+    pub compostables: Vec<CompostDef>,
+    /// Flammable blocks.
+    pub flammables: Vec<FlammableDef>,
+    /// Tool actions.
+    pub transforms: Vec<TransformDef>,
+    /// Pathfinding types of blocks.
+    pub path_types: Vec<PathTypeDef>,
+    /// Vibration frequencies of game events.
+    pub sculk_frequencies: Vec<SculkFrequencyDef>,
+}
+
+impl ContentTables {
+    /// True when no mod registered anything.
+    pub fn is_empty(&self) -> bool {
+        self.fuels.is_empty()
+            && self.compostables.is_empty()
+            && self.flammables.is_empty()
+            && self.transforms.is_empty()
+            && self.path_types.is_empty()
+            && self.sculk_frequencies.is_empty()
+    }
+}
+
+/// A sound event a mod registered (`fish:sound`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SoundDef {
+    /// The event's id, `namespace:path`; the namespace is the registering mod's id.
+    pub id: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+}
+
+/// A particle type a mod registered (`fish:particle`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParticleDef {
+    /// The type's id, `namespace:path`; the namespace is the registering mod's id.
+    pub id: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+    /// Drawn even when the player asked for minimal particles.
+    pub always_show: bool,
 }
 
 /// The type of a Fish game rule, with its bounds.
@@ -1034,6 +1216,21 @@ pub trait Dispatch: Send + Sync {
     fn creative_inventory(&self, _json: &str) -> Option<String> {
         None
     }
+    /// The content table entries of the mods that are on (`fish:content`). The game builds its
+    /// own tables once while it loads its resources (items, block behaviours, block transformers,
+    /// mob data) and applies these to them.
+    fn content_tables(&self) -> ContentTables {
+        ContentTables::default()
+    }
+    /// The vibration frequency a mod gave the game event `event`, if one did. Asked for every
+    /// vibration, so cheap.
+    fn sculk_frequency(&self, _event: &str) -> Option<u8> {
+        None
+    }
+    /// The sound events mods registered, in registration order.
+    fn sound_events(&self, _out: &mut Vec<SoundDef>) {}
+    /// The particle types mods registered, in registration order.
+    fn particle_types(&self, _out: &mut Vec<ParticleDef>) {}
 }
 
 /// What `/gamerule <fish rule> [<value>]` did, for the game (and the simulation) to word.
@@ -1498,5 +1695,44 @@ mod tests {
         );
         let other = std::thread::spawn(thread_context).join().unwrap();
         assert_eq!(other, (Role::Window, "minecraft:overworld"));
+    }
+
+    #[test]
+    fn the_content_defaults_are_empty() {
+        let d = Nothing;
+        assert!(d.content_tables().is_empty());
+        assert_eq!(d.sculk_frequency("minecraft:step"), None);
+        let (mut sounds, mut particles) = (Vec::new(), Vec::new());
+        d.sound_events(&mut sounds);
+        d.particle_types(&mut particles);
+        assert!(sounds.is_empty() && particles.is_empty());
+        assert!(!View.play_sound("a:b", None, 1.0, 1.0));
+        let mut tables = ContentTables::default();
+        tables.sculk_frequencies.push(SculkFrequencyDef {
+            event: "minecraft:step".into(),
+            mod_id: "m".into(),
+            frequency: 3,
+        });
+        assert!(!tables.is_empty());
+    }
+
+    #[test]
+    fn transform_kinds_name_their_tool() {
+        let named: Vec<(&str, &str)> = TransformKind::ALL
+            .iter()
+            .map(|k| (k.name(), k.tool()))
+            .collect();
+        assert_eq!(
+            named,
+            [
+                ("strip", "axe"),
+                ("till", "hoe"),
+                ("flatten", "shovel"),
+                ("wax", "axe"),
+                ("oxidize", "axe")
+            ]
+        );
+        assert_eq!(TransformKind::from_u8(3), Some(TransformKind::Wax));
+        assert_eq!(TransformKind::from_u8(5), None);
     }
 }

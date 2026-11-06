@@ -1,0 +1,111 @@
+Fish: the content tables of mods in the game's own tables (P8.6).
+
+Horizon builds its fuel and composting data (components of the item table), its mob pathfinding
+types (`MobData`), its block transformers (`data/minecraft/block_transformer/<tool>.json`) and its
+fire odds (`Behaviours`) once, while it loads the resources, and answers the vibration frequency of
+a game event from a fixed list. None of these sites can be hooked: `load_world_rest` and
+`Transformers::load` contain macros and `?`, `sculk::frequency` has closures, and the fire odds are
+read in horizon-world's generic loading code. This patch adds one call at each site:
+
+- `game.rs` `load_world_rest`: `fish_lib::content_mobs` after the mob data and
+  `fish_lib::content_items` after the item table;
+- `block_transform.rs` `Transformers::load`: `fish_lib::transformer_list` on each parsed file,
+  which appends the tool actions mods registered (`fish_loader::tables::patch_transformers`);
+- `sculk.rs` `frequency`: `fish_lib::sculk_frequency` first (`Dispatch::sculk_frequency`);
+- horizon-world `level/data.rs` `cached`: the fire odds of `Dispatch::content_tables`, applied
+  after the snapshot is stored or restored, so the snapshot keeps the game's own odds.
+
+The `fish_lib` functions come from the bundle (`modules/lib.rs`).
+
+diff --git a/crates/horizon-client/src/block_transform.rs b/crates/horizon-client/src/block_transform.rs
+index 4cd1d6f..0be1cbd 100644
+--- a/crates/horizon-client/src/block_transform.rs
++++ b/crates/horizon-client/src/block_transform.rs
+@@ -189,7 +189,9 @@ impl Transformers {
+                 let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+                     continue;
+                 };
+-                let list: Value = serde_json::from_slice(&fs::read(&path)?)?;
++                let mut list: Value = serde_json::from_slice(&fs::read(&path)?)?;
++                // Fish: the tool actions mods registered, after the vanilla ones (`fish:content`).
++                crate::fish_lib::transformer_list(stem, &mut list);
+                 let mut transforms = Vec::new();
+                 for t in list.as_array().into_iter().flatten() {
+                     let text = |k: &str, d: &str| t[k].as_str().unwrap_or(d).to_owned();
+diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.rs
+index 3f15e10..e311c17 100644
+--- a/crates/horizon-client/src/game.rs
++++ b/crates/horizon-client/src/game.rs
+@@ -14664,10 +14664,14 @@ fn load_world_rest(
+     let threads = resources.threads();
+     let registry_owner = assets;
+     progress.set(6);
+-    let mob_data = horizon_client::mobs::MobData::load(root, facts);
++    let mut mob_data = horizon_client::mobs::MobData::load(root, facts);
++    // Fish: the pathfinding types mods gave blocks (`fish:content`).
++    horizon_client::fish_lib::content_mobs(&mut mob_data, facts);
+     horizon_client::mobs::trial_spawner::load_registry(root);
+ 
+-    let items = Items::load(root, assets.registry, facts)?;
++    let mut items = Items::load(root, assets.registry, facts)?;
++    // Fish: the fuels and compostable items mods registered (`fish:content`).
++    horizon_client::fish_lib::content_items(&mut items);
+     log::info!("load items: {:.2}s", started.elapsed().as_secs_f32());
+     progress.set(7);
+     let recipes = Recipes::load(root, &items)?;
+diff --git a/crates/horizon-client/src/sculk.rs b/crates/horizon-client/src/sculk.rs
+index 071f682..4ec5476 100644
+--- a/crates/horizon-client/src/sculk.rs
++++ b/crates/horizon-client/src/sculk.rs
+@@ -82,6 +82,10 @@ pub const TENDRILS_CLICKING: &str = "minecraft:sculk_sensor_tendrils_clicking";
+ 
+ /// `VibrationSystem.getGameEventFrequency`.
+ pub fn frequency(event: &str) -> i32 {
++    // Fish: a frequency a mod gave the game event (`fish:content`) wins.
++    if let Some(frequency) = crate::fish_lib::sculk_frequency(event) {
++        return frequency;
++    }
+     if let Some(i) = RESONANCE.iter().position(|e| *e == event) {
+         return i as i32 + 1;
+     }
+diff --git a/crates/horizon-world/src/level/data.rs b/crates/horizon-world/src/level/data.rs
+index cda8342..2519f54 100644
+--- a/crates/horizon-world/src/level/data.rs
++++ b/crates/horizon-world/src/level/data.rs
+@@ -660,14 +660,34 @@ fn cached(
+     root: &Path,
+     build: impl FnOnce() -> io::Result<Behaviours>,
+ ) -> io::Result<Behaviours> {
+-    if let Some(behaviours) = cache::load(registry, root) {
++    if let Some(mut behaviours) = cache::load(registry, root) {
++        fish_fire_odds(&mut behaviours, registry);
+         return Ok(behaviours);
+     }
+-    let behaviours = build()?;
++    let mut behaviours = build()?;
+     cache::store(registry, root, &behaviours);
++    fish_fire_odds(&mut behaviours, registry);
+     Ok(behaviours)
+ }
+ 
++/// Fish: the fire odds mods gave blocks (`fish:content`), over the loaded tables. The snapshot keeps
++/// the game's own odds, so a change of the mods never meets stale ones.
++fn fish_fire_odds(behaviours: &mut Behaviours, registry: &BlockRegistry) {
++    let Some(d) = fish_hooks::get() else {
++        return;
++    };
++    for f in d.content_tables().flammables {
++        let Some(state) = registry.default_state(&f.block) else {
++            continue;
++        };
++        let block = behaviours.table.block(state);
++        if let Some(data) = behaviours.blocks.get_mut(block.0 as usize) {
++            data.ignite_odds = f.ignite_odds;
++            data.burn_odds = f.burn_odds;
++        }
++    }
++}
++
+ fn load_uncached(registry: &BlockRegistry, root: &Path) -> io::Result<Behaviours> {
+     let behaviour = read_json(&root.join("block-behaviours.json"))?;
+     build_with_behaviour_json(registry, root, &behaviour)

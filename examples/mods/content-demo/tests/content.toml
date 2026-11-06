@@ -1,0 +1,75 @@
+name = "content: fuel, composting, fire, tool actions, path types, vibrations, sound, particle"
+
+# registration: the tables hold the mod's entries, a second fuel entry for the same item is refused,
+# the sound and particle files are in the content folder
+[[step]]
+game = true
+[step.expect]
+logs = [
+  "second ruby fuel refused: registering a fuel failed: ALREADY_EXISTS",
+  "ruby sparkle raw id",
+  "Fish content tables: 1 fuel(s), 1 compostable item(s), 2 flammable block(s), 2 tool action(s), 1 path type(s), 1 sculk frequency(ies), 1 sound event(s), 1 particle type(s)",
+]
+sounds = ["content_demo:ruby_chime"]
+particles = ["content_demo:ruby_sparkle"]
+content_files = [
+  "assets/content_demo/sounds.json",
+  "assets/content_demo/sounds/ruby_chime.ogg",
+  "assets/content_demo/particles/ruby_sparkle.json",
+  "assets/content_demo/textures/particle/ruby_sparkle.png",
+  "data/content_demo/horizon/block/ruby_log.json",
+  "data/content_demo/horizon/block/stripped_ruby_log.json",
+  "data/content_demo/horizon/block/waxed_ruby_block.json",
+]
+
+# the game's tables: the mod's entries next to the vanilla ones
+[[step]]
+[step.expect]
+fuels = { "content_demo:ruby" = 2400, "minecraft:coal" = 1600, "content_demo:ruby_snack" = 0 }
+compostables = { "content_demo:ruby_snack" = 0.5, "minecraft:apple" = 0.65 }
+flammables = { "content_demo:ruby_log" = [30, 60], "content_demo:stripped_ruby_log" = [30, 60], "minecraft:oak_planks" = [5, 20], "content_demo:ruby_block" = [0, 0] }
+path_types = { "content_demo:raw_ruby" = "DAMAGING", "content_demo:ruby_block" = "BLOCKED" }
+sculk_frequencies = { "minecraft:eat" = 12, "minecraft:step" = 1 }
+
+# an axe strips the ruby log
+[[step]]
+use_tool = { tool = "axe", block = "content_demo:ruby_log" }
+[step.expect]
+tool_result = "content_demo:stripped_ruby_log"
+
+# honeycomb waxes the ruby block, an axe scrapes the wax off again
+[[step]]
+use_tool = { tool = "honeycomb", block = "content_demo:ruby_block" }
+[step.expect]
+tool_result = "content_demo:waxed_ruby_block"
+
+[[step]]
+use_tool = { tool = "axe", block = "content_demo:waxed_ruby_block" }
+[step.expect]
+tool_result = "content_demo:ruby_block"
+
+# vanilla actions are untouched, and a hoe does nothing to the ruby log
+[[step]]
+use_tool = { tool = "axe", block = "minecraft:oak_log" }
+[step.expect]
+tool_result = "minecraft:stripped_oak_log"
+
+[[step]]
+use_tool = { tool = "hoe", block = "content_demo:ruby_log" }
+[step.expect]
+tool_result = "none"
+
+# using the ruby in the air (on the server) makes the window play the mod's sound on its next tick
+[[step]]
+use_item = { item = "content_demo:ruby" }
+ticks = 1
+[step.expect]
+logs = ["ruby chime played"]
+played_sounds = ["content_demo:ruby_chime at 0.5 64 0.5 volume 1 pitch 1"]
+
+# the ruby block lets honeycomb and axes act on it instead of handling the click
+[[step]]
+place_block = { pos = [20, 64, 20], block = "content_demo:ruby_block" }
+use_block = { pos = [20, 64, 20], item = "minecraft:honeycomb" }
+[step.expect]
+use_result = "pass"

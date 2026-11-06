@@ -189,7 +189,8 @@ pub(crate) fn lookup(id: &str) -> Option<*const c_void> {
         _ => {
             return crate::fake_rules::lookup(id)
                 .or_else(|| crate::fake_blocks::lookup(id))
-                .or_else(|| crate::fake_items::lookup(id));
+                .or_else(|| crate::fake_items::lookup(id))
+                .or_else(|| crate::fake_content::lookup(id));
         }
     })
 }

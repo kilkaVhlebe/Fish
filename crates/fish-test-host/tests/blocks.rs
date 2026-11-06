@@ -48,6 +48,9 @@ fn states_follow_mod_and_block_order() {
         "block_edges:ticker",
         RAW,
         RUBY,
+        "content_demo:ruby_log",
+        "content_demo:stripped_ruby_log",
+        "content_demo:waxed_ruby_block",
     ];
     for (i, id) in ids.iter().enumerate() {
         let first = FIRST_FISH_STATE + u32::try_from(i).unwrap();

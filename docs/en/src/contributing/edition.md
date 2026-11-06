@@ -69,3 +69,10 @@ that state privately, so no hook can reach it.
 `fish_lib::creative_patch` (`Dispatch::creative_inventory`) before it becomes tabs. A hook cannot do it:
 `Creative::from_json` returns `Result<Self>`, which horizon-mixins cannot cancel, and takes a reference that cannot be
 replaced.
+
+`0009-content-tables.patch` applies the content tables of mods (`fish:content`) where Horizon builds its own tables:
+`load_world_rest` (the item table and the mob data, through `fish_lib::content_items` and `fish_lib::content_mobs`),
+`Transformers::load` (each `block_transformer/<tool>.json` through `fish_lib::transformer_list`), `sculk::frequency`
+(`fish_lib::sculk_frequency`) and horizon-world's `level/data.rs` `cached` (the fire odds on the loaded `Behaviours`,
+after the snapshot, so the snapshot keeps vanilla's). Hooks cannot: `load_world_rest` and `Transformers::load` have
+macros and `?`, `sculk::frequency` has closures (`E_UNSUPPORTED_CONTROL_FLOW`), and the behaviours load in generic code.

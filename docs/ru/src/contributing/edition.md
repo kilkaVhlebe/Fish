@@ -71,3 +71,10 @@ cargo xtask edition regressions                # собственные тест
 `fish_lib::creative_patch` (`Dispatch::creative_inventory`), прежде чем он станет вкладками. Хук тут не справится:
 `Creative::from_json` возвращает `Result<Self>`, который horizon-mixins не умеет отменять, и принимает ссылку, которую
 нельзя подменить.
+
+`0009-content-tables.patch` применяет таблицы контента модов (`fish:content`) там, где Horizon строит свои таблицы:
+`load_world_rest` (таблица предметов и данные мобов, через `fish_lib::content_items` и `fish_lib::content_mobs`),
+`Transformers::load` (каждый `block_transformer/<tool>.json` через `fish_lib::transformer_list`), `sculk::frequency`
+(`fish_lib::sculk_frequency`) и `cached` в horizon-world `level/data.rs` (шансы огня в загруженных `Behaviours` после
+снимка, так что снимок хранит ванильные). Хуки не справятся: в `load_world_rest` и `Transformers::load` есть макросы и
+`?`, в `sculk::frequency` — замыкания (`E_UNSUPPORTED_CONTROL_FLOW`), а поведения загружаются в обобщённом коде.

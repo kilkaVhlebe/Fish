@@ -19,14 +19,17 @@
 pub mod blocks;
 pub mod client;
 pub mod commands;
+pub mod content;
 pub mod debug;
 pub mod game;
 pub mod gamerules;
 pub mod ident;
 pub mod items;
 pub mod networking;
+pub mod particles;
 pub mod registry;
 pub mod services;
+pub mod sounds;
 mod tables;
 mod types;
 

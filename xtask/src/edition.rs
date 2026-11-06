@@ -683,6 +683,23 @@ pub fn verify_items_log(log: &str) -> Result<()> {
     Ok(())
 }
 
+/// Checks that the game applied the content tables of `content_demo` where it loads its own (the
+/// item table, the axe's transformer file, the mob data), that the mod's particle type got a raw id
+/// and that the window played the mod's sound event after the ruby was used.
+pub fn verify_content_log(log: &str) -> Result<()> {
+    for needle in [
+        "Fish content tables: 1 fuel(s), 1 compostable item(s), 2 flammable block(s)",
+        "Fish content tables: 2 item entr(ies) applied",
+        "Fish content tables: 2 axe action(s) added",
+        "Fish content tables: path types of 1 block state(s) applied",
+    ] {
+        if !log.lines().any(|l| l.contains(needle)) {
+            bail!("latest.log has no `{needle}` line");
+        }
+    }
+    content_demo_lines(log, &["ruby sparkle raw id", "ruby chime played"])
+}
+
 /// Checks what the `content_demo` mod logged during the e2e scenarios: the state ids Horizon gave
 /// its block, the late registration refusal, and the use, place and break of the ruby block.
 pub fn verify_blocks_log(log: &str) -> Result<()> {
@@ -1004,6 +1021,52 @@ pub fn e2e(
             let _ = ctl(horizon_ctl, &home, &["key", "esc", "tap"]);
             ctl(horizon_ctl, &home, &["wait", "10"])?;
         }
+        // Content tables: an axe strips a ruby log west of the ruby block; honeycomb waxes a ruby
+        // block north of it (the block's handler steps aside for tools) and an axe scrapes the wax
+        // off again. The game reads the tool actions from the transformer files patch 0009 extends.
+        let (west, north) = ((ruby_at[0] - 1).to_string(), (ruby_at[2] - 1).to_string());
+        let tool_on = |item: &str, at: [&str; 3], want: &str, absent: Option<&str>| -> Result<()> {
+            ctl(horizon_ctl, &home, &["select", item])?;
+            ctl(horizon_ctl, &home, &["interact", at[0], at[1], at[2], "up"])?;
+            ctl(horizon_ctl, &home, &["wait", "10"])?;
+            let seen = ctl(horizon_ctl, &home, &["block", at[0], at[1], at[2]])?;
+            if !seen.contains(want) || absent.is_some_and(|a| seen.contains(a)) {
+                bail!(
+                    "{item} on {}: expected {want}, the block is {seen}",
+                    at.join(" ")
+                );
+            }
+            Ok(())
+        };
+        for item in ["minecraft:iron_axe", "minecraft:honeycomb"] {
+            ctl(horizon_ctl, &home, &["command", &format!("give @s {item}")])?;
+        }
+        setblock(
+            [west.clone(), y.clone(), z.clone()],
+            "content_demo:ruby_log",
+        )?;
+        setblock([west.clone(), above.clone(), z.clone()], "minecraft:air")?;
+        setblock([x.clone(), y.clone(), north.clone()], ruby)?;
+        setblock([x.clone(), above.clone(), north.clone()], "minecraft:air")?;
+        ctl(horizon_ctl, &home, &["wait", "10"])?;
+        tool_on(
+            "minecraft:iron_axe",
+            [&west, &y, &z],
+            "content_demo:stripped_ruby_log",
+            None,
+        )?;
+        tool_on(
+            "minecraft:honeycomb",
+            [&x, &y, &north],
+            "content_demo:waxed_ruby_block",
+            None,
+        )?;
+        tool_on(
+            "minecraft:iron_axe",
+            [&x, &y, &north],
+            "content_demo:ruby_block",
+            Some("waxed"),
+        )?;
         // A data reload, then the F3 screen (it lists `events-demo is listening`) for the screenshot.
         ctl(horizon_ctl, &home, &["command", "reload"])?;
         ctl(horizon_ctl, &home, &["wait", "40"])?;
@@ -1021,6 +1084,7 @@ pub fn e2e(
         verify_gamerule_log(&log)?;
         verify_blocks_log(&log)?;
         verify_items_log(&log)?;
+        verify_content_log(&log)?;
         if !shot.is_file() {
             bail!("no screenshot was written to {}", shot.display());
         }

@@ -11,8 +11,9 @@ use fish_abi::debug::DebugPayload;
 use fish_abi::game::{EVENTS, GamePayload};
 use fish_abi::{ActionResult, COMBINE_FIRST_NON_PASS, COMBINE_NOTIFY, FishHandle, FishStr};
 use fish_hooks::{
-    BlockDef, BlockEvent, BlockRun, ClientView, CommandOutcome, CommandSource, Dispatch, GameEvent,
-    GameRuleDef, HudView, ItemDef, ItemEvent, Kind, NativeModRow, Outcome, Role, RuleValue,
+    BlockDef, BlockEvent, BlockRun, ClientView, CommandOutcome, CommandSource, ContentTables,
+    Dispatch, GameEvent, GameRuleDef, HudView, ItemDef, ItemEvent, Kind, NativeModRow, Outcome,
+    ParticleDef, Role, RuleValue, SoundDef,
 };
 
 use crate::boot::Loader;
@@ -756,6 +757,24 @@ impl Dispatch for LoaderDispatch {
 
     fn creative_inventory(&self, json: &str) -> Option<String> {
         quiet(None, || self.loader.inner.creative_inventory(json))
+    }
+
+    fn content_tables(&self) -> ContentTables {
+        quiet(ContentTables::default(), || {
+            self.loader.inner.content_tables()
+        })
+    }
+
+    fn sculk_frequency(&self, event: &str) -> Option<u8> {
+        quiet(None, || self.loader.inner.sculk_frequency(event))
+    }
+
+    fn sound_events(&self, out: &mut Vec<SoundDef>) {
+        quiet((), || self.loader.inner.sound_events(out));
+    }
+
+    fn particle_types(&self, out: &mut Vec<ParticleDef>) {
+        quiet((), || self.loader.inner.particle_types(out));
     }
 
     fn list_mods(&self, rows: &mut Vec<NativeModRow>) {

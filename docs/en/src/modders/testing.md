@@ -67,6 +67,7 @@ logs = ["refusing to break bedrock"]
 | `use_item = { item, hand }`, `use_entity = { id, type, item }` | an item is used in the air / on an entity (Fish item callbacks) |
 | `finish_using = { item }` | a consumable is finished (`on_finish_using`) |
 | `inventory_tick = { item, slot, selected }` | one inventory tick of a stack (`on_inventory_tick`) |
+| `use_tool = { tool, block }` | `axe`, `hoe`, `shovel` or `honeycomb` on a block with air above, read from the simulated transformer tables (`expect.tool_result`) |
 | `attack_block = { pos, block }`, `attack_entity = { id, type }` | attacks |
 | `break_block = { pos, block }` | `block_break_before`; `after` fires on the next `server_ticks` |
 | `damage = { id, type, amount, source }`, `death = { id, type }` | entity events |
@@ -85,3 +86,11 @@ and `command_ok`. In Rust, `TestHost` has the same flows (`use_block`, `break_bl
 Item expectations: `items` (registered Fish items), `tooltips` (lines `append_tooltip` adds for an item),
 `creative_tabs` (Fish tabs present), `creative_entries` (items present in a tab) and `no_creative_entries` (items that
 must not be in a tab). See [items](item.md) and [item groups](item_group.md).
+
+Content expectations: `fuels` (`"item" = ticks`, 0 for no fuel), `compostables` (`"item" = 0.5`), `flammables`
+(`"block" = [ignite, burn]`), `path_types` (`"block" = "DAMAGING"`), `sculk_frequencies` (`"minecraft:eat" = 12`),
+`sounds` and `particles` (registered ids), `played_sounds` (substrings of `id at x y z volume v pitch p`) and
+`tool_result` (what the step's `use_tool` left, `none` when nothing). The simulated game starts from small vanilla
+stand-ins (coal and sticks burn, apples compost, an axe strips oak logs, planks burn) and applies the mods' entries with
+the same functions as the edition. See [content tables](content.md), [sound events](sound.md) and
+[particle types](particle.md).

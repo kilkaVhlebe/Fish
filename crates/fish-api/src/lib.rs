@@ -15,6 +15,7 @@
 pub mod block;
 pub mod client;
 pub mod command;
+pub mod content;
 pub mod event;
 pub mod game;
 pub mod game_rule;
@@ -22,7 +23,9 @@ pub mod item;
 pub mod item_group;
 pub mod loader;
 pub mod networking;
+pub mod particle;
 pub mod registry;
+pub mod sound;
 pub mod tag;
 
 mod error;
@@ -61,6 +64,8 @@ mod fake;
 mod fake_blocks;
 #[cfg(test)]
 mod fake_client;
+#[cfg(test)]
+mod fake_content;
 #[cfg(test)]
 mod fake_items;
 #[cfg(test)]

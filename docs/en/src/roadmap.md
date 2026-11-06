@@ -88,10 +88,10 @@ file and in the Russian copy at the same time.
 - [ ] **P8.3** Custom state properties
 - [x] **P8.4** Items
 - [x] **P8.5** `item_group`
-- [ ] **P8.6** `content` registries
+- [x] **P8.6** `content` registries
 - [x] **P8.7** `tag` and convention tags
-- [ ] **P8.8** Sound events
-- [ ] **P8.9** Particle types
+- [x] **P8.8** Sound events
+- [x] **P8.9** Particle types
 - [x] **P8.10** `game_rule`
 - [ ] **P8.11** Tests, `content-demo`, e2e
 - [ ] **P8.12** Docs

@@ -16,6 +16,7 @@ use fish_pack::FishArchive;
 
 use crate::blocks::{BlockEntry, ContentMod, UserBox, check_def, check_id, write_content};
 use crate::client_services::role_byte;
+use crate::content::check_assets;
 use crate::inner::Inner;
 
 fn guard(f: impl FnOnce() -> FishStatus) -> FishStatus {
@@ -243,6 +244,9 @@ impl Inner {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .entries();
+        let (mut sounds, mut particles) = (Vec::new(), Vec::new());
+        self.sound_events(&mut sounds);
+        self.particle_types(&mut particles);
         let mut groups: Vec<(u64, Vec<&BlockDef>, Vec<&ItemDef>)> = Vec::new();
         let mut slot = |owner: u64| -> usize {
             groups
@@ -260,6 +264,17 @@ impl Inner {
         let mut items = Vec::new();
         for e in item_entries.iter().filter(|e| !self.owner_failed(e.owner)) {
             items.push((slot(e.owner), &e.def));
+        }
+        // A mod with sound events or particle types has assets to copy even without blocks or items.
+        let records = self.records();
+        for mod_id in sounds
+            .iter()
+            .map(|s| &s.mod_id)
+            .chain(particles.iter().map(|p| &p.mod_id))
+        {
+            if let Some(rec) = records.iter().find(|r| r.manifest.id.as_str() == mod_id) {
+                slot(rec.token);
+            }
         }
         for (i, def) in blocks {
             groups[i].1.push(def);
@@ -287,8 +302,13 @@ impl Inner {
                     m.name
                 ));
             }
+            let (own_sounds, own_particles): (Vec<_>, Vec<_>) = (
+                sounds.iter().filter(|s| s.mod_id == m.id).collect(),
+                particles.iter().filter(|p| p.mod_id == m.id).collect(),
+            );
             match write_content(&root, &m, &defs, &items, archive) {
                 Ok((folder, mut w)) => {
+                    warnings.extend(check_assets(&folder, m.id, &own_sounds, &own_particles));
                     folders.push(folder);
                     warnings.append(&mut w);
                 }
@@ -308,8 +328,11 @@ impl Inner {
     pub(crate) fn keep_block_archives(&self, archives: &mut HashMap<Origin, FishArchive>) {
         let mut store = self.blocks.lock().unwrap_or_else(|e| e.into_inner());
         let items = self.items.lock().unwrap_or_else(|e| e.into_inner());
+        let content = self.content.lock().unwrap_or_else(|e| e.into_inner());
         for rec in self.records() {
-            if (store.has_blocks_of(rec.token) || items.has_items_of(rec.token))
+            if (store.has_blocks_of(rec.token)
+                || items.has_items_of(rec.token)
+                || content.has_assets_of(rec.token))
                 && let Some(archive) = archives.remove(&rec.origin)
             {
                 store.keep_archive(rec.token, archive);

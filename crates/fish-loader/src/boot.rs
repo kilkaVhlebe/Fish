@@ -271,6 +271,18 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             fish_abi::items::SERVICE_ITEM_GROUP,
             std::ptr::from_ref(&crate::item_services::ITEM_GROUP) as usize,
         ),
+        (
+            fish_abi::content::SERVICE_CONTENT,
+            std::ptr::from_ref(&crate::content_services::CONTENT) as usize,
+        ),
+        (
+            fish_abi::sounds::SERVICE_SOUND,
+            std::ptr::from_ref(&crate::content_services::SOUND) as usize,
+        ),
+        (
+            fish_abi::particles::SERVICE_PARTICLE,
+            std::ptr::from_ref(&crate::content_services::PARTICLE) as usize,
+        ),
     ] {
         inner.services.write().expect("services").insert(
             id.to_string(),
@@ -430,6 +442,7 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             };
         }
     }
+    inner.log_content();
     let ok = active.iter().filter(|r| !r.is_failed()).count();
     inner.emit(
         log::Level::Info,
