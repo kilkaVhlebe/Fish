@@ -22,6 +22,7 @@ pub mod game_rule;
 pub mod item;
 pub mod item_group;
 pub mod loader;
+pub mod loot;
 pub mod networking;
 pub mod particle;
 pub mod registry;
@@ -69,6 +70,8 @@ mod fake_client;
 mod fake_content;
 #[cfg(test)]
 mod fake_items;
+#[cfg(test)]
+mod fake_loot;
 #[cfg(test)]
 mod fake_resources;
 #[cfg(test)]

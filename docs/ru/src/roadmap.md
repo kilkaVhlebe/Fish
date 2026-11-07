@@ -100,7 +100,7 @@
 
 - [x] **P9.1** `resource`
 - [x] **P9.2** `resource::conditions`
-- [ ] **P9.3** `loot`
+- [x] **P9.3** `loot`
 - [ ] **P9.4** `recipe`
 - [ ] **P9.5** `biome`
 - [ ] **P9.6** `dimension`

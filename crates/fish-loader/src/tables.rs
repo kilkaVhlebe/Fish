@@ -137,6 +137,65 @@ pub fn patch_transformers(tool: &str, list: &mut Value, tables: &ContentTables) 
     entries.len() - before
 }
 
+/// What [`apply_loot`] did.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LootApplied {
+    /// Changes applied.
+    pub applied: usize,
+    /// The tables changes named that the game does not have (each once).
+    pub missing: Vec<String>,
+}
+
+/// Applies the loot table changes of mods to the game's tables (`id` to the parsed table):
+/// every replacement first, then the added pools in registration order. A change of a table the
+/// game does not have is skipped.
+pub fn apply_loot(
+    tables: &mut std::collections::HashMap<String, Value>,
+    changes: &[fish_hooks::LootChange],
+) -> LootApplied {
+    use fish_hooks::LootChangeKind;
+    let mut done = LootApplied::default();
+    let miss = |table: &str, done: &mut LootApplied| {
+        if !done.missing.iter().any(|m| m == table) {
+            done.missing.push(table.to_string());
+        }
+    };
+    for c in changes.iter().filter(|c| c.kind == LootChangeKind::Replace) {
+        match (
+            tables.get_mut(&c.table),
+            serde_json::from_str::<Value>(&c.json),
+        ) {
+            (Some(slot), Ok(table)) => {
+                *slot = table;
+                done.applied += 1;
+            }
+            (None, _) => miss(&c.table, &mut done),
+            (Some(_), Err(_)) => {}
+        }
+    }
+    for c in changes
+        .iter()
+        .filter(|c| c.kind == LootChangeKind::AddPools)
+    {
+        let Some(table) = tables.get_mut(&c.table) else {
+            miss(&c.table, &mut done);
+            continue;
+        };
+        let pools = match serde_json::from_str::<Value>(&c.json) {
+            Ok(Value::Array(pools)) => pools,
+            Ok(pool @ Value::Object(_)) => vec![pool],
+            _ => continue,
+        };
+        if !table["pools"].is_array() {
+            table["pools"] = json!([]);
+        }
+        if let Some(list) = table["pools"].as_array_mut() {
+            list.extend(pools);
+            done.applied += 1;
+        }
+    }
+    done
+}
 /// One line saying what `tables`, `sounds` sound events and `particles` particle types hold.
 pub fn summary(tables: &ContentTables, sounds: usize, particles: usize) -> String {
     format!(
@@ -259,6 +318,62 @@ mod tests {
         assert_eq!(patch_transformers("pickaxe", &mut other, &tables), 0);
         let mut not_a_list = json!({});
         assert_eq!(patch_transformers("axe", &mut not_a_list, &tables), 0);
+    }
+
+    #[test]
+    fn loot_changes_replace_then_add_pools_and_skip_missing_tables() {
+        use fish_hooks::{LootChange, LootChangeKind};
+        let change = |table: &str, kind, json: &str| LootChange {
+            table: table.into(),
+            mod_id: "m".into(),
+            kind,
+            json: json.into(),
+        };
+        let mut tables: std::collections::HashMap<String, Value> = [
+            (
+                "minecraft:blocks/stone".to_string(),
+                json!({"pools": [{"rolls": 1}]}),
+            ),
+            (
+                "minecraft:blocks/dirt".to_string(),
+                json!({"type": "minecraft:block"}),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let done = apply_loot(
+            &mut tables,
+            &[
+                change(
+                    "minecraft:blocks/stone",
+                    LootChangeKind::AddPools,
+                    r#"{"rolls": 2}"#,
+                ),
+                change(
+                    "minecraft:blocks/stone",
+                    LootChangeKind::Replace,
+                    r#"{"pools": []}"#,
+                ),
+                change(
+                    "minecraft:blocks/dirt",
+                    LootChangeKind::AddPools,
+                    r#"[{"rolls": 3}, {"rolls": 4}]"#,
+                ),
+                change("minecraft:blocks/none", LootChangeKind::AddPools, r#"{}"#),
+                change("minecraft:blocks/none", LootChangeKind::Replace, r#"{}"#),
+            ],
+        );
+        assert_eq!(done.applied, 3);
+        assert_eq!(done.missing, ["minecraft:blocks/none"]);
+        // the replacement came first, then the pool was added to it
+        assert_eq!(
+            tables["minecraft:blocks/stone"],
+            json!({"pools": [{"rolls": 2}]})
+        );
+        assert_eq!(
+            tables["minecraft:blocks/dirt"]["pools"],
+            json!([{"rolls": 3}, {"rolls": 4}])
+        );
     }
 
     #[test]

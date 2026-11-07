@@ -48,6 +48,8 @@ pub struct ContentSim {
     pub played_sounds: Vec<String>,
     /// The block the last `use_tool` left (`none` when the tool did nothing).
     pub tool_result: String,
+    /// Loot table id to the table, with the changes of mods applied.
+    pub loot: std::collections::HashMap<String, Value>,
 }
 
 fn vanilla_transform(kind: TransformKind, from: &str, to: &str) -> Value {
@@ -123,6 +125,16 @@ fn vanilla() -> ContentSim {
     sim.path_types
         .insert("minecraft:cactus".to_string(), "DAMAGING".to_string());
     sim.known_sounds = VANILLA_SOUNDS.iter().map(|s| (*s).to_string()).collect();
+    for (table, item) in [
+        ("minecraft:blocks/stone", "minecraft:cobblestone"),
+        ("minecraft:entities/zombie", "minecraft:rotten_flesh"),
+        ("minecraft:blocks/dead_bush", "minecraft:stick"),
+    ] {
+        sim.loot.insert(
+            table.to_string(),
+            json!({"type": "minecraft:block", "pools": [{"rolls": 1, "entries": [{"type": "minecraft:item", "name": item}]}]}),
+        );
+    }
     sim
 }
 
@@ -167,6 +179,28 @@ impl ContentSim {
         }
     }
 
+    /// The items loot table `table` can drop: the names of its item entries, in order.
+    pub fn loot_items(&self, table: &str) -> Vec<String> {
+        fn walk(v: &Value, out: &mut Vec<String>) {
+            match v {
+                Value::Object(o) => {
+                    if o.get("type").and_then(Value::as_str) == Some("minecraft:item")
+                        && let Some(name) = o.get("name").and_then(Value::as_str)
+                    {
+                        out.push(name.to_string());
+                    }
+                    o.values().for_each(|v| walk(v, out));
+                }
+                Value::Array(a) => a.iter().for_each(|v| walk(v, out)),
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        if let Some(t) = self.loot.get(table) {
+            walk(&t["pools"], &mut out);
+        }
+        out
+    }
     /// The burn time of `item` in a furnace, zero when it is no fuel.
     pub fn fuel_ticks(&self, item: &str) -> u32 {
         self.items
@@ -282,6 +316,9 @@ impl TestHost {
     pub fn build_content(&mut self) {
         let mut sim = vanilla();
         sim.apply(&self.content_tables());
+        let mut changes = Vec::new();
+        self.rules_dispatch().loot_changes(&mut changes);
+        fish_loader::tables::apply_loot(&mut sim.loot, &changes);
         for dir in &self.sim.block_dirs {
             let Ok(namespaces) = std::fs::read_dir(dir.join("assets")) else {
                 continue;
@@ -430,6 +467,16 @@ impl TestHost {
                 format!("a played sound containing {want:?}"),
                 format!("{:?}", content.played_sounds),
             );
+        }
+        for (table, want) in &expect.loot {
+            let actual = content.loot_items(table);
+            if &actual != want {
+                return fail(
+                    "expect.loot",
+                    format!("{table} drops {want:?}"),
+                    format!("{actual:?}"),
+                );
+            }
         }
         if let Some(want) = &expect.tool_result
             && &content.tool_result != want

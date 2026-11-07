@@ -585,6 +585,28 @@ pub struct PathTypeDef {
     pub path_type: String,
 }
 
+/// What a loot table change does (`fish:loot`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LootChangeKind {
+    /// Append pools to the table.
+    AddPools,
+    /// Replace the whole table.
+    Replace,
+}
+
+/// A change a mod made to a loot table (`fish:loot`), in registration order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LootChange {
+    /// The table's id, `minecraft:blocks/stone`.
+    pub table: String,
+    /// The id of the mod that registered it.
+    pub mod_id: String,
+    /// What it does.
+    pub kind: LootChangeKind,
+    /// The pools (a list) or the whole table, as JSON text.
+    pub json: String,
+}
+
 /// The vibration frequency of a game event a mod registered (`fish:content`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SculkFrequencyDef {
@@ -1289,6 +1311,9 @@ pub trait Dispatch: Send + Sync {
     fn sound_events(&self, _out: &mut Vec<SoundDef>) {}
     /// The particle types mods registered, in registration order.
     fn particle_types(&self, _out: &mut Vec<ParticleDef>) {}
+    /// The changes mods made to loot tables, in registration order; the game applies them when
+    /// it loads its loot tables.
+    fn loot_changes(&self, _out: &mut Vec<LootChange>) {}
 }
 
 /// What `/gamerule <fish rule> [<value>]` did, for the game (and the simulation) to word.

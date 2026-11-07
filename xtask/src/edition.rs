@@ -729,6 +729,21 @@ pub fn verify_properties_log(log: &str) -> Result<()> {
     )
 }
 
+/// Checks that the game applied the loot table changes of `content_demo` (patch 0012).
+pub fn verify_loot_log(log: &str) -> Result<()> {
+    let needle = "Fish loot tables: 2 change(s) applied";
+    if !log.lines().any(|l| l.contains(needle)) {
+        bail!("latest.log has no `{needle}` line");
+    }
+    if log
+        .lines()
+        .any(|l| l.contains("the game has no loot table"))
+    {
+        bail!("a loot table change of content_demo named a table the game does not have");
+    }
+    Ok(())
+}
+
 /// Checks that `content_demo` read its own resources and the game's copy of its `sounds.json` at
 /// start; a resource reload (F3+T) is reported when the game did one.
 pub fn verify_resources_log(log: &str) -> Result<()> {
@@ -1175,6 +1190,7 @@ pub fn e2e(
         verify_content_log(&log)?;
         verify_properties_log(&log)?;
         verify_resources_log(&log)?;
+        verify_loot_log(&log)?;
         if !shot.is_file() {
             bail!("no screenshot was written to {}", shot.display());
         }

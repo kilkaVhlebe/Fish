@@ -32,6 +32,7 @@ mod inner;
 mod item_services;
 mod items;
 mod load;
+mod loot_services;
 mod net;
 mod net_services;
 mod registry_services;

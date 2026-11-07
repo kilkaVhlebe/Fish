@@ -176,6 +176,9 @@ pub struct Expect {
     /// Substrings of sounds mods played (`id at x y z volume v pitch p`).
     #[serde(default)]
     pub played_sounds: Vec<String>,
+    /// The items loot tables can drop, every one in this order: `"table" = ["item", ...]`.
+    #[serde(default)]
+    pub loot: BTreeMap<String, Vec<String>>,
     /// The block the step's `use_tool` left (`none` when the tool did nothing).
     pub tool_result: Option<String>,
 }

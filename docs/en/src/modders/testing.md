@@ -103,3 +103,7 @@ writes land on the next `server_ticks`. See [blocks](block.md#state-properties).
 Resources: the step `resource_reload = true` rebuilds the simulated resource root (vanilla stand-ins with the content
 folders over them) and raises `lifecycle/resources_reloaded` in the window; `Resources::game` reads that root. See
 [resources](resource.md).
+
+Loot: `loot = { "minecraft:entities/zombie" = ["minecraft:rotten_flesh", "content_demo:ruby"] }` lists, in order, the
+items of the item entries of a simulated loot table after the changes of mods (stand-ins: `minecraft:blocks/stone`,
+`minecraft:entities/zombie`, `minecraft:blocks/dead_bush`). See [loot tables](loot.md).

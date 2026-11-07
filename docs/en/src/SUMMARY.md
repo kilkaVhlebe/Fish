@@ -32,5 +32,6 @@
   - [Sound events](modders/sound.md)
   - [Particle types](modders/particle.md)
   - [Resources](modders/resource.md)
+  - [Loot tables](modders/loot.md)
 - [Tooling](modders/tooling.md)
 - [Testing](modders/testing.md)

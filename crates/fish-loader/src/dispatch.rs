@@ -787,6 +787,10 @@ impl Dispatch for LoaderDispatch {
         quiet((), || self.loader.inner.sound_events(out));
     }
 
+    fn loot_changes(&self, out: &mut Vec<fish_hooks::LootChange>) {
+        quiet((), || self.loader.inner.loot_changes(out));
+    }
+
     fn particle_types(&self, out: &mut Vec<ParticleDef>) {
         quiet((), || self.loader.inner.particle_types(out));
     }

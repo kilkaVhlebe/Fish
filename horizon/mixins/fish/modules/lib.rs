@@ -745,6 +745,18 @@ fn content_tables() -> Option<fish_hooks::ContentTables> {
 /// `load_world_rest`, right after the item table is read: the fuels and compostable items mods
 /// registered. Zero removes the property; an item the game does not know is skipped.
 pub fn content_items(items: &mut crate::items::Items) {
+    // The loot table changes of mods (`fish:loot`, patch 0012): replacements, then added pools.
+    if let Some(d) = fish_hooks::get() {
+        let mut changes = Vec::new();
+        d.loot_changes(&mut changes);
+        if !changes.is_empty() {
+            let done = fish_loader::tables::apply_loot(items.fish_loot_tables(), &changes);
+            log::info!("Fish loot tables: {} change(s) applied", done.applied);
+            for table in done.missing {
+                log::warn!("Fish: the game has no loot table {table}: its changes were skipped");
+            }
+        }
+    }
     let Some(tables) = content_tables() else { return };
     let mut applied = 0;
     for f in &tables.fuels {

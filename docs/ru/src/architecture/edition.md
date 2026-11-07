@@ -115,6 +115,7 @@ horizon-mixins отклоняет цели с непрозрачными мак�
 | запись состояний блоков | `ClientView::set_block_state` (`GameView` моста) | `Game::level_set` на встроенном или выделенном сервере (обновления соседей, клиенты); окно отказывает; записи событий без игры ждут в загрузчике `tick_end` сервера |
 | ресурсы модов (`fish:resource`) | оверлей контента + `ClientView::resource_root` (виды моста) | каждый мод с `assets/` или `data/` получает папку контента; `resource_root` — это `Options::resources`, корень после последней перезагрузки ресурсов |
 | `resources_reloaded` | **патч** `0011-resources-reloaded.patch` в конце `Game::apply_staged_pack` | `fish_bridge::events::resources_reloaded` поднимает событие с игрой окна; в `apply_staged_pack` есть замыкания и `?` |
+| изменения таблиц добычи (`fish:loot`) | **патч** `0012-loot-tables.patch` (`Items::fish_loot_tables`) + `fish_lib::content_items` | после чтения таблицы предметов (вызов из патча 0009) `fish_loader::tables::apply_loot` применяет замены, затем добавленные пулы |
 
 Выводимое событие без собственных слушателей всё равно поднимает базовое событие, если есть слушатель выводимого (мод,
 слушающий только `modify_send`, всё равно будет вызван).

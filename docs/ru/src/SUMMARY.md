@@ -32,5 +32,6 @@
   - [Звуковые события](modders/sound.md)
   - [Типы частиц](modders/particle.md)
   - [Ресурсы](modders/resource.md)
+  - [Таблицы добычи](modders/loot.md)
 - [Инструменты](modders/tooling.md)
 - [Тестирование](modders/testing.md)

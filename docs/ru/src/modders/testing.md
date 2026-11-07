@@ -104,3 +104,7 @@ logs = ["refusing to break bedrock"]
 Ресурсы: шаг `resource_reload = true` пересобирает симулированный корень ресурсов (ванильные заготовки с папками контента
 поверх) и поднимает `lifecycle/resources_reloaded` в окне; `Resources::game` читает этот корень. См.
 [ресурсы](resource.md).
+
+Добыча: `loot = { "minecraft:entities/zombie" = ["minecraft:rotten_flesh", "content_demo:ruby"] }` перечисляет по порядку
+предметы записей симулированной таблицы добычи после изменений модов (заготовки: `minecraft:blocks/stone`,
+`minecraft:entities/zombie`, `minecraft:blocks/dead_bush`). См. [таблицы добычи](loot.md).

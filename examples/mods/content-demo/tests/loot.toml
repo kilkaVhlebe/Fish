@@ -1,0 +1,7 @@
+name = "loot: a pool added to a vanilla table, a table replaced, other tables untouched"
+
+[[step]]
+game = true
+[step.expect]
+logs = ["Fish loot tables: 2 change(s)"]
+loot = { "minecraft:entities/zombie" = ["minecraft:rotten_flesh", "content_demo:ruby"], "minecraft:blocks/dead_bush" = ["content_demo:ruby"], "minecraft:blocks/stone" = ["minecraft:cobblestone"] }

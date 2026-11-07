@@ -287,6 +287,10 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             fish_abi::resources::SERVICE_RESOURCE,
             std::ptr::from_ref(&crate::resource_services::RESOURCE) as usize,
         ),
+        (
+            fish_abi::loot::SERVICE_LOOT,
+            std::ptr::from_ref(&crate::loot_services::LOOT) as usize,
+        ),
     ] {
         inner.services.write().expect("services").insert(
             id.to_string(),
@@ -449,6 +453,7 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
         }
     }
     inner.log_content();
+    inner.log_loot();
     let ok = active.iter().filter(|r| !r.is_failed()).count();
     inner.emit(
         log::Level::Info,

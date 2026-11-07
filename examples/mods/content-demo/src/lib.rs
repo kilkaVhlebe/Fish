@@ -14,6 +14,8 @@
 //!   air plays the mod's sound event `content_demo:ruby_chime`,
 //! * `content_demo:ruby_snack` (an apple) logs who ate it and composts with a 50 % chance,
 //! * eating makes a vibration of frequency 12 for sculk sensors (vanilla: 8),
+//! * zombies sometimes drop a ruby (a pool added to their loot table) and a dead bush drops a ruby
+//!   (its loot table replaced),
 //! * the particle type `content_demo:ruby_sparkle` is registered (it has no client factory yet:
 //!   nothing draws it),
 //! * the tab `content_demo:ruby_tab` lists the items and blocks above, and the ruby is also added
@@ -37,6 +39,7 @@ use fish_api::content::{Content, PathNodeType};
 use fish_api::event::lifecycle;
 use fish_api::item::{ItemBehaviour, ItemSettings, Items, Rarity};
 use fish_api::item_group::{ItemGroup, ItemGroups};
+use fish_api::loot::{LootPool, LootTables};
 use fish_api::particle::{ParticleType, Particles};
 use fish_api::resource::Resources;
 use fish_api::sound::{SoundEvent, Sounds};
@@ -147,6 +150,18 @@ fn content() -> Result<(), Error> {
         Ok(()) => log::error!("a second fuel entry for the ruby was accepted"),
         Err(e) => log::info!("second ruby fuel refused: {e}"),
     }
+    // Loot: zombies sometimes drop a ruby, a dead bush drops a ruby instead of sticks.
+    LootTables::add_pool(
+        "minecraft:entities/zombie",
+        &LootPool::item("content_demo:ruby").chance(0.05).to_json(),
+    )?;
+    LootTables::replace(
+        "minecraft:blocks/dead_bush",
+        &format!(
+            r#"{{"type":"minecraft:block","pools":[{}]}}"#,
+            LootPool::item("content_demo:ruby").to_json()
+        ),
+    )?;
     let _ = CHIME.set(Sounds::register("content_demo:ruby_chime")?);
     let _ = SPARKLE.set(Particles::register("content_demo:ruby_sparkle")?);
     lifecycle::client::END_TICK.register(|c| {

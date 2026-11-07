@@ -25,6 +25,7 @@ pub mod game;
 pub mod gamerules;
 pub mod ident;
 pub mod items;
+pub mod loot;
 pub mod networking;
 pub mod particles;
 pub mod registry;

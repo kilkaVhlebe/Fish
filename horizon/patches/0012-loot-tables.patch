@@ -1,0 +1,21 @@
+Fish: access to the loot tables for the changes of mods (P9.3).
+
+horizon-items keeps every loot table in the private `Items::loot`. This patch adds
+`Items::fish_loot_tables`, which `fish_lib::content_items` (called after the item table is read,
+patch 0009) uses to apply the loot table changes mods registered (`fish:loot`) through
+`fish_loader::tables::apply_loot`: replacements first, then the added pools.
+diff --git a/crates/horizon-items/src/items.rs b/crates/horizon-items/src/items.rs
+index bfb2614..e19a4e8 100644
+--- a/crates/horizon-items/src/items.rs
++++ b/crates/horizon-items/src/items.rs
+@@ -858,6 +858,10 @@ impl Items {
+         }
+         false
+     }
++    /// Fish: the loot tables by id, for the changes mods make to them (P9.3).
++    pub fn fish_loot_tables(&mut self) -> &mut HashMap<String, Value> {
++        &mut self.loot
++    }
+     /// Whether a loot table (`minecraft:blocks/stone`, ...) exists.
+     pub fn has_loot_table(&self, id: &str) -> bool {
+         self.loot.contains_key(id)

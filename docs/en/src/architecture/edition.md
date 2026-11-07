@@ -114,6 +114,7 @@ exact point, the event is **approximated**; the notes say how.
 | block state writes | `ClientView::set_block_state` (the bundle's `GameView`) | `Game::level_set` on the integrated or dedicated server (neighbour updates, clients); a window refuses; writes of events without a game wait in the loader for the server's `tick_end` |
 | resources of mods (`fish:resource`) | content overlay + `ClientView::resource_root` (the bundle's views) | every mod with `assets/` or `data/` gets a content folder; `resource_root` is `Options::resources`, the root the last resource reload left |
 | `resources_reloaded` | **patch** `0011-resources-reloaded.patch` at the end of `Game::apply_staged_pack` | `fish_bridge::events::resources_reloaded` raises the event with the window's game; `apply_staged_pack` has closures and `?` |
+| loot table changes (`fish:loot`) | **patch** `0012-loot-tables.patch` (`Items::fish_loot_tables`) + `fish_lib::content_items` | after the item table is read (patch 0009's call), `fish_loader::tables::apply_loot` applies replacements, then added pools |
 
 A derived event whose own listeners are missing still raises its base event when a derived listener exists (a mod that
 listens only to `modify_send` still gets called).

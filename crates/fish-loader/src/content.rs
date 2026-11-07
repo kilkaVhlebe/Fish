@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use fish_hooks::{
-    CompostDef, ContentTables, FlammableDef, FuelDef, ParticleDef, PathTypeDef, SculkFrequencyDef,
-    SoundDef, TransformDef,
+    CompostDef, ContentTables, FlammableDef, FuelDef, LootChange, LootChangeKind, ParticleDef,
+    PathTypeDef, SculkFrequencyDef, SoundDef, TransformDef,
 };
 use serde_json::Value;
 
@@ -59,6 +59,7 @@ pub(crate) struct ContentStore {
     sculk: Table<SculkFrequencyDef>,
     sounds: Table<SoundDef>,
     particles: Table<ParticleDef>,
+    loot: Table<LootChange>,
 }
 
 impl ContentStore {
@@ -142,6 +143,18 @@ impl ContentStore {
         self.particles.live(&live)
     }
 
+    /// Adds a loot table change; a second replacement of one table is refused.
+    pub(crate) fn add_loot(&mut self, change: LootChange, owner: u64) -> Result<(), u64> {
+        let (table, replace) = (change.table.clone(), change.kind == LootChangeKind::Replace);
+        self.loot.insert(change, owner, |c| {
+            replace && c.kind == LootChangeKind::Replace && c.table == table
+        })
+    }
+
+    /// The loot table changes of the mods `live` keeps, in registration order.
+    pub(crate) fn loot(&self, live: impl Fn(u64) -> bool) -> Vec<LootChange> {
+        self.loot.live(&live)
+    }
     /// True when `token` registered a sound event or a particle type: its assets are content.
     pub(crate) fn has_assets_of(&self, token: u64) -> bool {
         self.sounds.owned_by(token) || self.particles.owned_by(token)
@@ -157,6 +170,7 @@ impl ContentStore {
         self.sculk.clear();
         self.sounds.clear();
         self.particles.clear();
+        self.loot.clear();
     }
 }
 

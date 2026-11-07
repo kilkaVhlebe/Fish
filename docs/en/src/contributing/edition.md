@@ -96,3 +96,6 @@ blocks and the lamp's state properties), `content_folder` (the content folder fo
 particles and blockstates) and `content_tables`. `cargo xtask e2e --resources <26.3 folder> --horizon-ctl <path>` drives
 a real game window through horizon-ctl and checks the events, game rules, blocks, items, content tables, sounds and state
 properties of the example mods in `latest.log` and in the world, then reopens the saved world.
+
+`0012-loot-tables.patch` adds `Items::fish_loot_tables` to horizon-items (the tables are a private field), so that
+`fish_lib::content_items` applies the loot table changes of mods right after the item table is read.
