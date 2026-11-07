@@ -685,3 +685,12 @@ pub(in crate::game) fn run_command(game: &mut Game<'_>, command: &str) -> Option
     }
     Some(outcome.ok)
 }
+
+/// `apply_staged_pack` (patch 0011): the window reloaded its resources.
+pub(in crate::game) fn resources_reloaded(game: &mut Game<'_>) {
+    let Some(d) = wanted(Kind::ResourcesReloaded) else {
+        return;
+    };
+    let e = base(game, Kind::ResourcesReloaded);
+    fire(game, d, &e);
+}

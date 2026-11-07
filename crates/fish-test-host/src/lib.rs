@@ -122,6 +122,7 @@ impl TestHost {
         self.build_blocks();
         self.build_creative();
         self.build_content();
+        self.build_resource_root();
         Ok(self)
     }
 

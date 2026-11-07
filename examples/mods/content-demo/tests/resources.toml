@@ -1,0 +1,18 @@
+name = "resources: own files, the game's resource root at start and after a reload, data files"
+
+# the mod reads its own assets; the window reads the game's copy of its sounds.json when it starts;
+# the loot table of the ruby block is in the content folder
+[[step]]
+game = true
+[step.expect]
+logs = [
+  "its sounds.json names ruby_chime: true",
+  "game resources at start: sounds.json names ruby_chime: true",
+]
+content_files = ["data/content_demo/loot_table/blocks/ruby_block.json"]
+
+# a resource reload raises the event in the window, which reads the game's resources again
+[[step]]
+resource_reload = true
+[step.expect]
+logs = ["game resources after a reload: sounds.json names ruby_chime: true"]

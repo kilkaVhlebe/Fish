@@ -68,6 +68,11 @@ pub trait ClientView {
     fn world_id(&self) -> Option<String> {
         None
     }
+    /// The folder of the game's active resource root (vanilla resources, resource packs and the
+    /// content of mods over them), where `assets/` and `data/` are. `None` without one.
+    fn resource_root(&self) -> Option<PathBuf> {
+        None
+    }
     /// Puts block state `state` at `pos`, with the updates a block change makes (neighbours,
     /// clients). False where the game does not own the world (a window of a remote server) or
     /// the write failed.
@@ -888,11 +893,13 @@ pub enum Kind {
     NetServerJoin,
     /// A player's connection closed. `actor`, `actor_uuid`, `subject` = reason when known.
     NetServerDisconnect,
+    /// The client reloaded its resources (resource packs changed, F3+T). Window only.
+    ResourcesReloaded,
 }
 
 impl Kind {
     /// Every kind, in table order.
-    pub const ALL: [Kind; 50] = [
+    pub const ALL: [Kind; 51] = [
         Kind::ClientStarted,
         Kind::ClientStopping,
         Kind::ClientStopped,
@@ -943,6 +950,7 @@ impl Kind {
         Kind::NetServerInit,
         Kind::NetServerJoin,
         Kind::NetServerDisconnect,
+        Kind::ResourcesReloaded,
     ];
 
     /// `group/name` as it appears after `fish:` in the event id.
@@ -998,6 +1006,7 @@ impl Kind {
             Kind::NetServerInit => "networking/server_init",
             Kind::NetServerJoin => "networking/server_join",
             Kind::NetServerDisconnect => "networking/server_disconnect",
+            Kind::ResourcesReloaded => "lifecycle/resources_reloaded",
         }
     }
 }
@@ -1785,6 +1794,11 @@ mod tests {
         );
         assert_eq!(properties_text(std::iter::empty()), "");
         assert!(!View.set_block_state([0, 0, 0], 1));
+        assert!(View.resource_root().is_none());
+        assert_eq!(
+            Kind::ResourcesReloaded.name(),
+            "lifecycle/resources_reloaded"
+        );
         Nothing.block_properties(&[(1, "a=b".into())]);
     }
     #[test]

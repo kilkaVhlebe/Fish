@@ -729,6 +729,27 @@ pub fn verify_properties_log(log: &str) -> Result<()> {
     )
 }
 
+/// Checks that `content_demo` read its own resources and the game's copy of its `sounds.json` at
+/// start; a resource reload (F3+T) is reported when the game did one.
+pub fn verify_resources_log(log: &str) -> Result<()> {
+    content_demo_lines(
+        log,
+        &[
+            "its sounds.json names ruby_chime: true",
+            "game resources at start: sounds.json names ruby_chime: true",
+        ],
+    )?;
+    if log
+        .lines()
+        .any(|l| l.contains("game resources after a reload: sounds.json names ruby_chime: true"))
+    {
+        eprintln!("the resource reload (F3+T) reached content_demo");
+    } else {
+        eprintln!("note: latest.log has no resource reload of content_demo (F3+T did not reload)");
+    }
+    Ok(())
+}
+
 /// Checks what the `content_demo` mod logged during the e2e scenarios: the state ids Horizon gave
 /// its block, the late registration refusal, and the use, place and break of the ruby block.
 pub fn verify_blocks_log(log: &str) -> Result<()> {
@@ -1122,6 +1143,11 @@ pub fn e2e(
         setblock([x.clone(), above.clone(), south.clone()], "minecraft:stone")?;
         ctl(horizon_ctl, &home, &["wait", "10"])?;
         lamp(&["lit=false", "level=1"])?;
+        // A client resource reload (F3+T): mods hear `resources_reloaded` and read the new root.
+        ctl(horizon_ctl, &home, &["key", "f3", "down"])?;
+        ctl(horizon_ctl, &home, &["key", "t", "tap"])?;
+        ctl(horizon_ctl, &home, &["key", "f3", "up"])?;
+        ctl(horizon_ctl, &home, &["wait", "100"])?;
         // A data reload, then the F3 screen (it lists `events-demo is listening`) for the screenshot.
         ctl(horizon_ctl, &home, &["command", "reload"])?;
         ctl(horizon_ctl, &home, &["wait", "40"])?;
@@ -1141,6 +1167,7 @@ pub fn e2e(
         verify_items_log(&log)?;
         verify_content_log(&log)?;
         verify_properties_log(&log)?;
+        verify_resources_log(&log)?;
         if !shot.is_file() {
             bail!("no screenshot was written to {}", shot.display());
         }

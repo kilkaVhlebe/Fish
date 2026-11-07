@@ -62,6 +62,8 @@ pub struct Sim {
     pub block_states: std::collections::BTreeMap<[i32; 3], u32>,
     /// The properties of every Fish block state (`k=v,...`), as the simulated game reports them.
     pub state_properties: std::collections::BTreeMap<u32, String>,
+    /// The simulated game's resource root: vanilla stand-ins with the content folders over them.
+    pub resource_root: Option<PathBuf>,
 }
 
 impl Default for Sim {
@@ -90,6 +92,7 @@ impl Default for Sim {
             content: crate::content::ContentSim::default(),
             block_states: std::collections::BTreeMap::new(),
             state_properties: std::collections::BTreeMap::new(),
+            resource_root: None,
             world: Some("world".to_string()),
             player: Some(PlayerSnapshot {
                 x: 0.5,
@@ -139,6 +142,12 @@ impl ClientView for SimView<'_> {
             .map(|w| world_dir(&self.dir, w).to_string_lossy().into_owned())
     }
 
+    fn resource_root(&self) -> Option<PathBuf> {
+        if self.role == Role::DedicatedServer {
+            return None;
+        }
+        self.sim.resource_root.clone()
+    }
     fn set_block_state(&mut self, pos: [i32; 3], state: u32) -> bool {
         if !self.role.is_server() {
             return false;

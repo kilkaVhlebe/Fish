@@ -1360,7 +1360,8 @@ mod tests {
         loader.inner.keep_block_archives(&mut archives);
         let folders = loader.inner.blocks_content();
         let root = dir.path().join(".fish").join("content");
-        assert_eq!(folders, [root.join("ruby")]);
+        // gem has resource files too: it gets a folder without items (P9.1)
+        assert_eq!(folders, [root.join("ruby"), root.join("gem")]);
         let json: serde_json::Value = serde_json::from_slice(
             &std::fs::read(root.join("ruby/data/ruby/horizon/item/gem.json")).unwrap(),
         )

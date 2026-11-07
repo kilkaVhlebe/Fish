@@ -18,6 +18,8 @@
 //!   nothing draws it),
 //! * the tab `content_demo:ruby_tab` lists the items and blocks above, and the ruby is also added
 //!   to vanilla's `minecraft:ingredients`,
+//! * the mod reads its own `assets/` and, at start and after every resource reload, the game's copy
+//!   of its `sounds.json`; the ruby block drops a ruby (`data/content_demo/loot_table`),
 //! * the server logs the state ids of the ruby block and the raw id of the particle type when it
 //!   starts and tries to register one more block and one more item (refused: the registries are
 //!   frozen).
@@ -35,6 +37,7 @@ use fish_api::event::lifecycle;
 use fish_api::item::{ItemBehaviour, ItemSettings, Items, Rarity};
 use fish_api::item_group::{ItemGroup, ItemGroups};
 use fish_api::particle::{ParticleType, Particles};
+use fish_api::resource::Resources;
 use fish_api::sound::{SoundEvent, Sounds};
 use fish_api::{ActionResult, Error};
 
@@ -46,6 +49,32 @@ static CHIME: OnceLock<SoundEvent> = OnceLock::new();
 static CHIME_PENDING: AtomicBool = AtomicBool::new(false);
 /// The particle type, for its raw id.
 static SPARKLE: OnceLock<ParticleType> = OnceLock::new();
+
+/// The mod's own resource files, and the game's copy of its `sounds.json` at start and after every
+/// resource reload (the file reaches the game through the content folder).
+fn resources() -> Result<(), Error> {
+    let files = Resources::list_own("assets/content_demo/")?;
+    let sounds = Resources::own_text("assets/content_demo/sounds.json")?;
+    log::info!(
+        "content_demo has {} asset files; its sounds.json names ruby_chime: {}",
+        files.len(),
+        sounds.contains("ruby_chime")
+    );
+    let game_sounds =
+        |client: &fish_api::client::ClientHandle, when: &str| match Resources::game_text(
+            client,
+            "assets/content_demo/sounds.json",
+        ) {
+            Ok(text) => log::info!(
+                "game resources {when}: sounds.json names ruby_chime: {}",
+                text.contains("ruby_chime")
+            ),
+            Err(e) => log::warn!("game resources {when}: {e}"),
+        };
+    lifecycle::client::STARTED.register(move |c| game_sounds(&c.client(), "at start"))?;
+    lifecycle::resources::RELOADED.register(move |c| game_sounds(&c.client(), "after a reload"))?;
+    Ok(())
+}
 
 /// The ruby lamp: state properties `lit` (off by default) and `level` (0 to 3). Using it lights it,
 /// then raises its level; a neighbour change puts it out (an event without a game: the write
@@ -234,6 +263,7 @@ fn init() -> Result<(), Error> {
         .register()?;
     content()?;
     lamp()?;
+    resources()?;
     ItemGroups::modify_entries("minecraft:ingredients", ["content_demo:ruby"])?;
 
     lifecycle::server::STARTED.register(|_| {

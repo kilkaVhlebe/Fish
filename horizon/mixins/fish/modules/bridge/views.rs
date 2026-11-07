@@ -67,6 +67,13 @@ impl ClientView for GameView<'_, '_> {
         super::rules::world_of(self.game)
     }
 
+    // The active resource root (vanilla, resource packs and the content overlay), as the last
+    // resource reload left it.
+    fn resource_root(&self) -> Option<PathBuf> {
+        let root = &self.game.options.resources;
+        (!root.as_os_str().is_empty()).then(|| root.clone())
+    }
+
     // A block state written like `/setblock` does without `strict` (neighbour updates, clients).
     // Only a game that owns its world writes: the integrated or dedicated server.
     fn set_block_state(&mut self, pos: [i32; 3], state: u32) -> bool {
@@ -96,6 +103,7 @@ pub(in crate::game) struct SnapshotView {
     dir: PathBuf,
     window: bool,
     world: Option<String>,
+    resources: Option<PathBuf>,
     pub(in crate::game) chat: Vec<String>,
 }
 
@@ -107,6 +115,7 @@ impl SnapshotView {
             dir: dir_of(game),
             window: game.native_window(),
             world: super::rules::world_of(game),
+            resources: Some(game.options.resources.clone()).filter(|r| !r.as_os_str().is_empty()),
             chat: Vec::new(),
         }
     }
@@ -133,6 +142,10 @@ impl ClientView for SnapshotView {
 
     fn world_id(&self) -> Option<String> {
         self.world.clone()
+    }
+
+    fn resource_root(&self) -> Option<PathBuf> {
+        self.resources.clone()
     }
 }
 

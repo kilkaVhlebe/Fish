@@ -86,6 +86,10 @@ cargo xtask edition regressions                # собственные тест
 значение по умолчанию. Без добавленных свойств он ничего не меняет. Это не точка хука: построитель оверлея — один
 приватный план.
 
+`0011-resources-reloaded.patch` добавляет один вызов в конец `Game::apply_staged_pack` (подмена после перезагрузки
+ресурсов, F3+T или смена паков): `fish_bridge::events::resources_reloaded` поднимает
+`fish:lifecycle/resources_reloaded`. В функции есть замыкания и `?`, поэтому horizon-mixins не может её перехватить.
+
 ## Самопроверка и внутриигровой тест
 
 `edition selftest` запускает собранный бинарник с `FISH_LOADER_ADD_MODS` (`hello` и `content_demo`) и

@@ -25,6 +25,7 @@ pub mod loader;
 pub mod networking;
 pub mod particle;
 pub mod registry;
+pub mod resource;
 pub mod sound;
 pub mod tag;
 
@@ -68,5 +69,7 @@ mod fake_client;
 mod fake_content;
 #[cfg(test)]
 mod fake_items;
+#[cfg(test)]
+mod fake_resources;
 #[cfg(test)]
 mod fake_rules;

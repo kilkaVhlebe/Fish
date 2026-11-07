@@ -31,5 +31,6 @@
   - [Content tables](modders/content.md)
   - [Sound events](modders/sound.md)
   - [Particle types](modders/particle.md)
+  - [Resources](modders/resource.md)
 - [Tooling](modders/tooling.md)
 - [Testing](modders/testing.md)

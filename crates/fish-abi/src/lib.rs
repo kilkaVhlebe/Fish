@@ -28,6 +28,7 @@ pub mod items;
 pub mod networking;
 pub mod particles;
 pub mod registry;
+pub mod resources;
 pub mod services;
 pub mod sounds;
 mod tables;

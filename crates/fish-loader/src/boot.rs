@@ -283,6 +283,10 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
             fish_abi::particles::SERVICE_PARTICLE,
             std::ptr::from_ref(&crate::content_services::PARTICLE) as usize,
         ),
+        (
+            fish_abi::resources::SERVICE_RESOURCE,
+            std::ptr::from_ref(&crate::resource_services::RESOURCE) as usize,
+        ),
     ] {
         inner.services.write().expect("services").insert(
             id.to_string(),
@@ -391,6 +395,8 @@ pub fn boot(cfg: BootConfig) -> Result<Loader, BootError> {
         }
     }
 
+    // Archives with resource files stay readable from the entrypoints on (`fish:resource`).
+    inner.keep_resource_archives(&mut archives);
     // Entrypoints: all pre_launch, then all main, then client/server.
     let side_key = match cfg.side {
         Side::Client => "client",

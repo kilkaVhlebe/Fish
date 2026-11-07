@@ -506,6 +506,8 @@ pub struct Step {
     pub chat_received: Option<ChatReceived>,
     /// A command typed on the server (Fish command trees).
     pub server_command: Option<ServerCommand>,
+    /// The window reloads its resources (resource packs changed, F3+T).
+    pub resource_reload: Option<bool>,
     /// `/reload` runs.
     pub reload: Option<bool>,
     /// The game starts (`true`) or stops (`false`).
@@ -627,6 +629,9 @@ fn game_actions(host: &mut TestHost, step: &Step) {
     }
     if let Some(e) = &step.attack_entity {
         host.attack_entity(e.id, &e.kind);
+    }
+    if step.resource_reload == Some(true) {
+        host.reload_resources();
     }
     if let Some(t) = &step.use_tool {
         host.use_tool(&t.tool, &t.block);

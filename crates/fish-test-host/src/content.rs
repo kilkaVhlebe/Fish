@@ -444,6 +444,65 @@ impl TestHost {
     }
 }
 
+/// The vanilla stand-ins of the simulated resource root.
+const VANILLA_RESOURCES: [(&str, &str); 2] = [
+    (
+        "assets/minecraft/lang/en_us.json",
+        "{\"block.minecraft.stone\": \"Stone\"}",
+    ),
+    (
+        "assets/minecraft/sounds.json",
+        "{\"block.note_block.bell\": {\"sounds\": []}}",
+    ),
+];
+
+fn copy_tree(from: &std::path::Path, to: &std::path::Path) {
+    let Ok(entries) = std::fs::read_dir(from) else {
+        return;
+    };
+    for e in entries.flatten() {
+        let target = to.join(e.file_name());
+        if e.path().is_dir() {
+            copy_tree(&e.path(), &target);
+        } else {
+            let _ = std::fs::create_dir_all(to);
+            let _ = std::fs::copy(e.path(), &target);
+        }
+    }
+}
+
+impl TestHost {
+    /// Builds the simulated resource root in the game directory (`resources/`): the vanilla
+    /// stand-ins with the `assets/` and `data/` of every content folder over them, as Horizon's
+    /// content overlay does. Runs at the end of boot and on [`TestHost::reload_resources`].
+    pub fn build_resource_root(&mut self) {
+        let root = self.dir.path().join("resources");
+        let _ = std::fs::remove_dir_all(&root);
+        for (path, text) in VANILLA_RESOURCES {
+            let file = root.join(path);
+            if let Some(parent) = file.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::write(file, text);
+        }
+        for dir in &self.sim.block_dirs {
+            for top in ["assets", "data"] {
+                copy_tree(&dir.join(top), &root.join(top));
+            }
+        }
+        self.sim.resource_root = Some(root);
+    }
+
+    /// The window reloads its resources (resource packs changed, F3+T): the root is rebuilt and
+    /// `lifecycle/resources_reloaded` raised in the window's game.
+    pub fn reload_resources(&mut self) -> fish_hooks::Outcome {
+        self.build_resource_root();
+        self.game_event(&fish_hooks::GameEvent::new(
+            fish_hooks::Kind::ResourcesReloaded,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

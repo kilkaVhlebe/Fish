@@ -435,6 +435,15 @@ impl Inner {
                 slot(rec.token);
             }
         }
+        // Every other mod with resource files gets them into the game too (P9.1).
+        {
+            let store = self.blocks.lock().unwrap_or_else(|e| e.into_inner());
+            for rec in records.iter().filter(|r| !r.is_failed()) {
+                if store.has_resources_of(rec.token) {
+                    slot(rec.token);
+                }
+            }
+        }
         for (i, def) in blocks {
             groups[i].1.push(def);
         }
@@ -483,7 +492,22 @@ impl Inner {
         folders
     }
 
-    /// Keeps the archives of the mods that registered blocks (their assets are copied later).
+    /// Keeps the archives with resource files (`assets/`, `data/`) before the entrypoints run, so
+    /// a mod reads its own files from `main` on.
+    pub(crate) fn keep_resource_archives(&self, archives: &mut HashMap<Origin, FishArchive>) {
+        let mut store = self.blocks.lock().unwrap_or_else(|e| e.into_inner());
+        for rec in self.records() {
+            if archives
+                .get(&rec.origin)
+                .is_some_and(crate::blocks::has_resources)
+                && let Some(archive) = archives.remove(&rec.origin)
+            {
+                store.keep_archive(rec.token, archive);
+            }
+        }
+    }
+    /// Keeps the archives of the mods with content or resource files (`assets/`, `data/`): the
+    /// content folders copy them and `fish:resource` reads them.
     pub(crate) fn keep_block_archives(&self, archives: &mut HashMap<Origin, FishArchive>) {
         let mut store = self.blocks.lock().unwrap_or_else(|e| e.into_inner());
         let items = self.items.lock().unwrap_or_else(|e| e.into_inner());
@@ -491,7 +515,10 @@ impl Inner {
         for rec in self.records() {
             if (store.has_blocks_of(rec.token)
                 || items.has_items_of(rec.token)
-                || content.has_assets_of(rec.token))
+                || content.has_assets_of(rec.token)
+                || archives
+                    .get(&rec.origin)
+                    .is_some_and(crate::blocks::has_resources))
                 && let Some(archive) = archives.remove(&rec.origin)
             {
                 store.keep_archive(rec.token, archive);
@@ -1615,8 +1642,9 @@ mod tests {
     fn content_is_written_for_mods_with_blocks_and_copies_their_assets() {
         let (loader, h, dir) = host();
         let (t, other) = (token(&loader, "ruby"), token(&loader, "gem"));
-        assert!(loader.inner.blocks_content().is_empty());
-        assert!(!dir.path().join(".fish").join("content").exists());
+        // Ruby has resource files: its content folder exists before any block (P9.1).
+        let root = dir.path().join(".fish").join("content");
+        assert_eq!(loader.inner.blocks_content(), [root.join("ruby")]);
         assert_eq!(plain(h, t, "ruby:block"), FishStatus::OK);
         assert_eq!(plain(h, other, "gem:stone"), FishStatus::OK);
 
@@ -1632,7 +1660,7 @@ mod tests {
         assert!(archives.is_empty());
 
         let folders = loader.inner.blocks_content();
-        let root = dir.path().join(".fish").join("content");
+        // (the same root as above)
         assert_eq!(folders, [root.join("ruby"), root.join("gem")]);
         let toml = std::fs::read_to_string(root.join("ruby").join("horizon-mod.toml")).unwrap();
         assert!(
@@ -1675,7 +1703,8 @@ mod tests {
         let t = token(&loader, "gem");
         assert_eq!(plain(h, t, "gem:stone"), FishStatus::OK);
         let folders = loader.inner.blocks_content();
-        assert_eq!(folders.len(), 1);
+        // gem's folder, and ruby's (it has resource files)
+        assert_eq!(folders.len(), 2);
         assert!(warned(&loader, "the archive of Gem is not available"));
         assert!(
             dir.path()

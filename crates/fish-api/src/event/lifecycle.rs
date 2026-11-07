@@ -79,3 +79,13 @@ pub mod reload {
     /// Data reload finished (observed on the next server tick).
     pub static END: Event<GameContext> = Event::new(game_ids::RELOAD_END, Combine::Notify);
 }
+
+/// Client resource reloads (resource packs changed, F3+T).
+pub mod resources {
+    use super::*;
+
+    /// The window reloaded its resources: the game's resources a mod read with
+    /// [`Resources::game`](crate::resource::Resources::game) may have changed.
+    pub static RELOADED: Event<GameContext> =
+        Event::new(game_ids::RESOURCES_RELOADED, Combine::Notify);
+}

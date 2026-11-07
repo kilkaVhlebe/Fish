@@ -98,7 +98,7 @@
 
 ## P9 — Ресурсы и данные
 
-- [ ] **P9.1** `resource`
+- [x] **P9.1** `resource`
 - [ ] **P9.2** `resource::conditions`
 - [ ] **P9.3** `loot`
 - [ ] **P9.4** `recipe`

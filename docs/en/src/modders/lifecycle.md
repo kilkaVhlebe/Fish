@@ -19,6 +19,7 @@ tick events carry a `TickContext`.
 | `chunk::LOAD`, `UNLOAD` | a chunk enters or leaves the loaded set; **no game view** | `pos()` = chunk `x`, `z` |
 | `reload::START` | `/reload` runs | role |
 | `reload::END` | the first server tick after `START` (the data is ready) | role |
+| `resources::RELOADED` | the window reloaded its resources (resource packs changed, F3+T); see [resources](resource.md) | window |
 
 ```rust
 use fish_api::event::lifecycle::{server, world};

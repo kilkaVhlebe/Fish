@@ -99,3 +99,7 @@ Block state properties: `block_properties = { "x y z" = "level=1,lit=true" }` ch
 position (`k=v` pairs sorted by key). A placed block starts in its default state; the simulated server puts the states
 mods set, and raises `neighbor_changed`, `random_tick` and `scheduled_tick` without a game like the edition, so their
 writes land on the next `server_ticks`. See [blocks](block.md#state-properties).
+
+Resources: the step `resource_reload = true` rebuilds the simulated resource root (vanilla stand-ins with the content
+folders over them) and raises `lifecycle/resources_reloaded` in the window; `Resources::game` reads that root. See
+[resources](resource.md).

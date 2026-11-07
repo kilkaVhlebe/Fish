@@ -199,6 +199,11 @@ impl BlockStore {
         self.archives.insert(token, archive);
     }
 
+    /// True when mod `token` has a kept archive with resource files.
+    pub(crate) fn has_resources_of(&self, token: u64) -> bool {
+        self.archives.get(&token).is_some_and(has_resources)
+    }
+
     /// The kept archive of mod `token`.
     pub(crate) fn archive_mut(&mut self, token: u64) -> Option<&mut FishArchive> {
         self.archives.get_mut(&token)
@@ -268,6 +273,13 @@ impl BlockStore {
     }
 }
 
+/// True when `archive` holds files under `assets/` or `data/`: the mod has resources for the game.
+pub(crate) fn has_resources(archive: &FishArchive) -> bool {
+    archive
+        .entries()
+        .iter()
+        .any(|e| !e.is_dir && (e.name.starts_with("assets/") || e.name.starts_with("data/")))
+}
 fn path_chars_ok(path: &str) -> bool {
     !path.is_empty()
         && path

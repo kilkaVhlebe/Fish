@@ -1,0 +1,20 @@
+Fish: the event of a client resource reload (P9.1).
+
+`Game::apply_staged_pack` swaps in the reloaded resources (`Minecraft.reloadResourcePacks`: a pack
+change in the options, F3+T). It is not a hook site: it has closures and `?`. This patch adds one
+call after the swap, `fish_bridge::events::resources_reloaded`, which raises
+`fish:lifecycle/resources_reloaded` with the window's game, whose `resource_root` is the new root.
+
+diff --git a/crates/horizon-client/src/game/packs.rs b/crates/horizon-client/src/game/packs.rs
+index 2096e8c..545bccf 100644
+--- a/crates/horizon-client/src/game/packs.rs
++++ b/crates/horizon-client/src/game/packs.rs
+@@ -255,6 +255,8 @@ impl Game<'_> {
+         self.ui.chat.rescale(&self.gui.atlas);
+         // The creative screen survives the reload; item names may not.
+         self.creative_screen.forget_items();
++        // Fish: mods hear that the resources changed (`fish:lifecycle/resources_reloaded`).
++        super::fish_bridge::events::resources_reloaded(self);
+         Ok(())
+     }
+     /// `Minecraft.reloadResourcePacks`: the reload staged on the spot, then

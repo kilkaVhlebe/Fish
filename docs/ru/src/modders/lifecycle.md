@@ -19,6 +19,7 @@
 | `chunk::LOAD`, `UNLOAD` | чанк попадает в загруженные или покидает их; **нет вида игры** | `pos()` = `x`, `z` чанка |
 | `reload::START` | выполняется `/reload` | role |
 | `reload::END` | первый тик сервера после `START` (данные готовы) | role |
+| `resources::RELOADED` | окно перезагрузило ресурсы (сменились ресурспаки, F3+T); см. [ресурсы](resource.md) | окно |
 
 ```rust
 use fish_api::event::lifecycle::{server, world};

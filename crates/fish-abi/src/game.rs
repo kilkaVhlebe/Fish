@@ -112,10 +112,13 @@ pub mod ids {
     pub const NET_SERVER_JOIN: &str = "fish:networking/server_join";
     /// A player's connection closed. `actor`, `actor_uuid`, `subject` = reason when known.
     pub const NET_SERVER_DISCONNECT: &str = "fish:networking/server_disconnect";
+    /// The client reloaded its resources (resource packs changed, F3+T): the files of
+    /// `assets/` mods read through `fish:resource` `read_game` may have changed. Window only.
+    pub const RESOURCES_RELOADED: &str = "fish:lifecycle/resources_reloaded";
 }
 
 /// Every game event with its combine mode, in the order of `fish_hooks::Kind`.
-pub const EVENTS: [(&str, u8); 50] = [
+pub const EVENTS: [(&str, u8); 51] = [
     (ids::CLIENT_STARTED, COMBINE_NOTIFY),
     (ids::CLIENT_STOPPING, COMBINE_NOTIFY),
     (ids::CLIENT_STOPPED, COMBINE_NOTIFY),
@@ -166,6 +169,7 @@ pub const EVENTS: [(&str, u8); 50] = [
     (ids::NET_SERVER_INIT, COMBINE_NOTIFY),
     (ids::NET_SERVER_JOIN, COMBINE_NOTIFY),
     (ids::NET_SERVER_DISCONNECT, COMBINE_NOTIFY),
+    (ids::RESOURCES_RELOADED, COMBINE_NOTIFY),
 ];
 
 /// [`GamePayload::hand`]: main hand.

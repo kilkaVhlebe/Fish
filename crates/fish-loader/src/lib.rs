@@ -35,6 +35,7 @@ mod net;
 mod net_services;
 mod registry_services;
 mod report;
+mod resource_services;
 pub mod selftest;
 pub mod tables;
 

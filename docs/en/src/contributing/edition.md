@@ -83,6 +83,10 @@ values, the default) and makes `mod_content.rs` emit every template state once p
 repeats, `model-states.json` gets the schema and possible states, `render-definitions.json` the ids and the default.
 Without added properties it changes nothing. It is not a hook site: the overlay builder is one private plan.
 
+`0011-resources-reloaded.patch` adds one call at the end of `Game::apply_staged_pack` (the swap after a resource reload,
+F3+T or a pack change): `fish_bridge::events::resources_reloaded` raises `fish:lifecycle/resources_reloaded`. The
+function has closures and `?`, so horizon-mixins cannot hook it.
+
 ## The self test and the in-game test
 
 `edition selftest` starts the built binary with `FISH_LOADER_ADD_MODS` (`hello` and `content_demo`) and
