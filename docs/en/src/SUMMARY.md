@@ -21,6 +21,7 @@
   - [Commands](modders/commands.md)
   - [F3, crashes, stopped mods](modders/debug.md)
   - [Networking](modders/networking.md)
+  - [Content](modders/content-overview.md)
   - [Registries](modders/registry.md)
   - [Tags](modders/tags.md)
   - [Game rules](modders/game_rule.md)

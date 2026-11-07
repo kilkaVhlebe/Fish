@@ -94,7 +94,7 @@ file and in the Russian copy at the same time.
 - [x] **P8.9** Particle types
 - [x] **P8.10** `game_rule`
 - [x] **P8.11** Tests, `content-demo`, e2e
-- [ ] **P8.12** Docs
+- [x] **P8.12** Docs
 
 ## P9 — Resources and data
 

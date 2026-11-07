@@ -21,6 +21,7 @@
   - [Команды](modders/commands.md)
   - [F3, падения, остановленные моды](modders/debug.md)
   - [Сеть](modders/networking.md)
+  - [Контент](modders/content-overview.md)
   - [Реестры](modders/registry.md)
   - [Теги](modders/tags.md)
   - [Игровые правила](modders/game_rule.md)
