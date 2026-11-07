@@ -452,6 +452,12 @@ impl Inner {
         }
         let root = Path::new(&self.game_dir).join(".fish").join("content");
         let (mut folders, mut warnings) = (Vec::new(), Vec::new());
+        let loaded: Vec<String> = self
+            .records()
+            .iter()
+            .filter(|r| !r.is_failed())
+            .map(|r| r.manifest.id.as_str().to_string())
+            .collect();
         for (owner, defs, items) in groups {
             let Some(rec) = self.record(owner) else {
                 continue;
@@ -461,6 +467,7 @@ impl Inner {
                 name: &rec.manifest.name,
                 version: &rec.version_text,
                 description: &rec.manifest.description,
+                loaded: &loaded,
             };
             let mut store = self.blocks.lock().unwrap_or_else(|e| e.into_inner());
             let archive = store.archive_mut(owner);
@@ -487,7 +494,10 @@ impl Inner {
             }
         }
         for w in warnings {
-            self.warn(w);
+            match w.strip_prefix("info: ") {
+                Some(note) => self.emit(log::Level::Info, "fish_loader", note.to_string()),
+                None => self.warn(w),
+            }
         }
         folders
     }

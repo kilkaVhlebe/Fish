@@ -1,0 +1,21 @@
+{
+  "fish:load_conditions": [
+    {
+      "condition": "fish:any_mods_loaded",
+      "values": ["content_demo"]
+    }
+  ],
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "#": "content_demo:ruby"
+  },
+  "pattern": [
+    "###",
+    "###",
+    "###"
+  ],
+  "result": {
+    "id": "content_demo:ruby_block"
+  }
+}

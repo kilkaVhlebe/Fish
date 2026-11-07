@@ -739,6 +739,13 @@ pub fn verify_resources_log(log: &str) -> Result<()> {
             "game resources at start: sounds.json names ruby_chime: true",
         ],
     )?;
+    // Resource conditions: the recipe that needs the mod `gems` was left out.
+    if !log
+        .lines()
+        .any(|l| l.contains("were left out by their load conditions: data/content_demo/recipe/ruby_from_raw_gem.json"))
+    {
+        bail!("latest.log has no line about the recipe left out by its load conditions");
+    }
     if log
         .lines()
         .any(|l| l.contains("game resources after a reload: sounds.json names ruby_chime: true"))

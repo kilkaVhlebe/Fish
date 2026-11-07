@@ -1,0 +1,14 @@
+{
+  "fish:load_conditions": [
+    {
+      "condition": "fish:all_mods_loaded",
+      "values": ["gems"]
+    }
+  ],
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": ["gems:raw_gem"],
+  "result": {
+    "id": "content_demo:ruby"
+  }
+}

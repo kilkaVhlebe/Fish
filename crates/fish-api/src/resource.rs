@@ -26,6 +26,8 @@
 //! Paths are archive paths, `assets/<namespace>/...` or `data/<namespace>/...`, without `.` or
 //! `..` components; files are at most 64 MiB.
 
+pub mod conditions;
+
 use std::ffi::c_void;
 
 use fish_abi::FishStr;

@@ -16,3 +16,11 @@ content_files = ["data/content_demo/loot_table/blocks/ruby_block.json"]
 resource_reload = true
 [step.expect]
 logs = ["game resources after a reload: sounds.json names ruby_chime: true"]
+
+# resource conditions: the ruby block recipe holds (content_demo is loaded) and is copied without
+# its conditions; the recipe that needs the mod `gems` is left out
+[[step]]
+[step.expect]
+content_files = ["data/content_demo/recipe/ruby_block.json"]
+no_content_files = ["data/content_demo/recipe/ruby_from_raw_gem.json"]
+logs = ["1 file(s) of Content Demo were left out by their load conditions: data/content_demo/recipe/ruby_from_raw_gem.json"]

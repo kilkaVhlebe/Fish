@@ -14,7 +14,7 @@ the detailed per-item checklist is in [docs/en/src/roadmap.md](docs/en/src/roadm
 | P6 | **Events I**: Lifecycle, interaction, entities, chat, commands, F3, crash info | ✅ done |
 | P7 | **Networking**: Custom payloads, handshake, registry sync | ✅ done |
 | P8 | **Content**: Registries, blocks with state properties, items, item groups, tags, content tables, sounds, particles, game rules | ✅ done |
-| P9 | **Resources and data**: Resource packs, loot, recipes, biomes, dimensions, data generation | 🚧 in progress (resource loader done) |
+| P9 | **Resources and data**: Resource packs, loot, recipes, biomes, dimensions, data generation | 🚧 in progress (resource loader and conditions done) |
 | P10 | **Rendering**: World/HUD rendering, shaders, models, particles, sound | ⬜ planned |
 | P11 | **UI and input**: Screens, config screens, key bindings, menus | ⬜ planned |
 | P12 | **Gameplay**: Block entities, entities, storage API, fluids, effects, villagers | ⬜ planned |
@@ -28,7 +28,7 @@ the detailed per-item checklist is in [docs/en/src/roadmap.md](docs/en/src/roadm
 - Players can install Fish, press Play on the "Fish" instance and put `.fish` mods into `fish-mods/`.
 - Mods can react to many game events, add commands, send network payloads and add content: blocks (with state
   properties), items, creative tabs, tags, game rules, fuel/compost/fire/tool tables, sounds and particle types.
-- Next: P9.2 resource conditions, then loot and recipes.
+- Next: P9.3 loot, then recipes.
 
 ## Known gaps
 

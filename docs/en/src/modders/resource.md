@@ -46,6 +46,36 @@ fn init() -> Result<(), fish_api::Error> {
 - Paths are `assets/<namespace>/...` or `data/<namespace>/...` without `.` or `..` components; files are at most 64 MiB.
   A missing file is `NOT_FOUND`.
 
+## Conditions
+
+A JSON file under `data/` may carry load conditions (Fabric's resource conditions). The loader evaluates them when it
+writes the content folder at start: the file is copied without the key when every condition holds, and left out
+otherwise (one info line names the files left out).
+
+```json
+{
+  "fish:load_conditions": [
+    { "condition": "fish:all_mods_loaded", "values": ["gems"] }
+  ],
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": ["gems:raw_gem"],
+  "result": { "id": "content_demo:ruby" }
+}
+```
+
+| `condition` | holds when |
+| --- | --- |
+| `fish:all_mods_loaded` | every mod id of `values` is loaded (`minecraft` and `fish` always are; a mod that failed is not) |
+| `fish:any_mods_loaded` | one mod id of `values` is loaded |
+| `fish:not` | the condition `value` does not hold |
+| `fish:and`, `fish:or` | every / one condition of `values` holds |
+| `fish:true` | always |
+
+The `fabric:` names of the same conditions are accepted under `fish:load_conditions` too. A condition the loader cannot
+read (an unknown name, a missing list) leaves the file out with a warning. `fish_api::resource::conditions::Condition`
+writes the same JSON from Rust (`Condition::all_mods_loaded(["gems"]).to_json()`, `Condition::list(...)`), for
+generated data files. Only `data/**.json` files are checked; `assets/` files are copied as they are.
+
 ## Reloads
 
 `lifecycle::resources::RELOADED` fires in the window after it reloaded its resources (the resource packs changed in the

@@ -45,6 +45,36 @@ fn init() -> Result<(), fish_api::Error> {
 - Пути — `assets/<namespace>/...` или `data/<namespace>/...` без компонентов `.` и `..`; файлы не больше 64 МиБ.
   Отсутствующий файл — `NOT_FOUND`.
 
+## Условия
+
+JSON-файл в `data/` может нести условия загрузки (аналог resource conditions из Fabric). Загрузчик проверяет их, когда
+пишет папку контента при старте: файл копируется без этого ключа, если все условия выполнены, и пропускается иначе (одна
+информационная строка называет пропущенные файлы).
+
+```json
+{
+  "fish:load_conditions": [
+    { "condition": "fish:all_mods_loaded", "values": ["gems"] }
+  ],
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": ["gems:raw_gem"],
+  "result": { "id": "content_demo:ruby" }
+}
+```
+
+| `condition` | выполняется, когда |
+| --- | --- |
+| `fish:all_mods_loaded` | загружены все моды из `values` (`minecraft` и `fish` загружены всегда; упавший мод — нет) |
+| `fish:any_mods_loaded` | загружен один мод из `values` |
+| `fish:not` | условие `value` не выполняется |
+| `fish:and`, `fish:or` | выполняются все / одно из условий `values` |
+| `fish:true` | всегда |
+
+Имена `fabric:` тех же условий внутри `fish:load_conditions` тоже принимаются. Условие, которое загрузчик не может
+прочитать (неизвестное имя, нет списка), пропускает файл с предупреждением. `fish_api::resource::conditions::Condition`
+пишет тот же JSON из Rust (`Condition::all_mods_loaded(["gems"]).to_json()`, `Condition::list(...)`) для
+сгенерированных файлов данных. Проверяются только файлы `data/**.json`; файлы `assets/` копируются как есть.
+
 ## Перезагрузки
 
 `lifecycle::resources::RELOADED` срабатывает в окне после перезагрузки его ресурсов (в настройках сменились ресурспаки,

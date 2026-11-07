@@ -99,7 +99,7 @@ file and in the Russian copy at the same time.
 ## P9 — Resources and data
 
 - [x] **P9.1** `resource`
-- [ ] **P9.2** `resource::conditions`
+- [x] **P9.2** `resource::conditions`
 - [ ] **P9.3** `loot`
 - [ ] **P9.4** `recipe`
 - [ ] **P9.5** `biome`

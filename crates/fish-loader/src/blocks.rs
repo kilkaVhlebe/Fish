@@ -431,6 +431,8 @@ pub(crate) struct ContentMod<'a> {
     pub version: &'a str,
     /// Description (may be empty).
     pub description: &'a str,
+    /// The ids of the loaded mods, for the resource conditions of the mod's files.
+    pub loaded: &'a [String],
 }
 
 fn toml_str(s: &str) -> String {
@@ -516,6 +518,8 @@ pub(crate) fn content_files(
         return (files, warnings);
     };
     let (mut foreign, mut invalid, mut unreadable) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut skipped, mut broken) = (Vec::new(), Vec::new());
+    let loaded = |id: &str| m.loaded.iter().any(|l| l == id);
     let names: Vec<String> = archive
         .entries()
         .iter()
@@ -544,9 +548,13 @@ pub(crate) fn content_files(
             continue;
         }
         match archive.read_entry(&name) {
-            Ok(bytes) => {
-                files.insert(name, bytes);
-            }
+            Ok(bytes) => match crate::conditions::filter(&name, bytes, &loaded) {
+                crate::conditions::Filtered::Keep(bytes) => {
+                    files.insert(name, bytes);
+                }
+                crate::conditions::Filtered::Skip => skipped.push(name),
+                crate::conditions::Filtered::Invalid(why) => broken.push(format!("{name} ({why})")),
+            },
             Err(e) => unreadable.push(format!("{name} ({e})")),
         }
     }
@@ -564,6 +572,20 @@ pub(crate) fn content_files(
             "{} file(s) of {who} have names Horizon refuses (use a-z, 0-9 and _ . - ) and were not copied: {}",
             invalid.len(),
             describe(&invalid)
+        ));
+    }
+    if !broken.is_empty() {
+        warnings.push(format!(
+            "{} file(s) of {who} have load conditions that cannot be read and were not copied: {}",
+            broken.len(),
+            describe(&broken)
+        ));
+    }
+    if !skipped.is_empty() {
+        warnings.push(format!(
+            "info: {} file(s) of {who} were left out by their load conditions: {}",
+            skipped.len(),
+            describe(&skipped)
         ));
     }
     if !unreadable.is_empty() {
@@ -866,6 +888,7 @@ mod tests {
             name: "Ruby \"Mod\"",
             version: "1.2.3",
             description: "",
+            loaded: &[],
         };
         let text = String::from_utf8(horizon_manifest(&m)).unwrap();
         assert_eq!(
@@ -918,6 +941,7 @@ mod tests {
         name: "Ruby",
         version: "1.0.0",
         description: "Gems",
+        loaded: &[],
     };
 
     #[test]

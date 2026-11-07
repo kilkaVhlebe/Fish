@@ -18,6 +18,7 @@ mod bus;
 mod client_services;
 mod command_services;
 mod commands;
+mod conditions;
 mod content;
 mod content_services;
 mod discovery;

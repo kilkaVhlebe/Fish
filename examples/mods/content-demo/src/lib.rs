@@ -19,7 +19,8 @@
 //! * the tab `content_demo:ruby_tab` lists the items and blocks above, and the ruby is also added
 //!   to vanilla's `minecraft:ingredients`,
 //! * the mod reads its own `assets/` and, at start and after every resource reload, the game's copy
-//!   of its `sounds.json`; the ruby block drops a ruby (`data/content_demo/loot_table`),
+//!   of its `sounds.json`; the ruby block drops a ruby (`data/content_demo/loot_table`) and is
+//!   crafted from nine rubies; a recipe that needs the mod `gems` is left out by its load conditions,
 //! * the server logs the state ids of the ruby block and the raw id of the particle type when it
 //!   starts and tries to register one more block and one more item (refused: the registries are
 //!   frozen).
